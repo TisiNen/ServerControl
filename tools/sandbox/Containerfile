@@ -1,0 +1,38 @@
+# Load-test sandbox for the Server Control plasmoid.
+# Runs plasmoidviewer on a virtual X screen and reports QML errors.
+# Build: podman build -t servercontrol-sandbox tools/sandbox
+FROM registry.fedoraproject.org/fedora:44
+
+# plasma-sdk:          plasmoidviewer
+# libplasma:           org.kde.plasma.plasmoid / components / extras
+# plasma5support:      P5Support.DataSource and the executable engine
+# kf6-kirigami:        org.kde.kirigami
+# kf6-kcmutils:        org.kde.kcmutils (config pages)
+# plasma-workspace:    remaining Plasma QML modules and theme
+# xorg-x11-server-Xvfb, dbus-daemon: virtual screen and session bus
+RUN dnf -y install --setopt=install_weak_deps=False \
+        plasma-sdk \
+        libplasma \
+        plasma5support \
+        kf6-kirigami \
+        kf6-kcmutils \
+        plasma-workspace \
+        breeze-icon-theme \
+        xorg-x11-server-Xvfb \
+        dbus-daemon \
+        procps-ng \
+    && dnf clean all
+
+RUN useradd -m tester
+COPY --chmod=755 entrypoint.sh /usr/local/bin/entrypoint.sh
+
+USER tester
+# QT_FORCE_STDERR_LOGGING: without it Qt sends QML warnings to journald,
+# which doesn't exist here, and the log stays empty.
+ENV LANG=C.UTF-8 \
+    QT_FORCE_STDERR_LOGGING=1 \
+    XDG_RUNTIME_DIR=/tmp/runtime-tester \
+    QT_QPA_PLATFORM=xcb \
+    DISPLAY=:99
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

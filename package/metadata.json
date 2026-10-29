@@ -1,0 +1,18 @@
+{
+  "KPlugin": {
+    "Authors": [
+      {
+        "Name": "TisiNen"
+      }
+    ],
+    "Category": "System Information",
+    "Description": "Show home server status, wake servers and power them off",
+    "Icon": "network-server",
+    "Id": "com.github.TisiNen.servercontrol",
+    "License": "GPL-3.0-or-later",
+    "Name": "Server Control",
+    "Version": "0.1"
+  },
+  "KPackageStructure": "Plasma/Applet",
+  "X-Plasma-API-Minimum-Version": "6.0"
+}
