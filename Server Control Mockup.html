@@ -1,0 +1,820 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Server Control Mockup</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&family=Noto+Sans+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a fake Plasma desktop (panel + popup) beside a short "try this" column; settings open as a window over the page. Breeze-like look. */
+:root {
+  --page:#f3f4f5; --wall1:#a9cbe2; --wall2:#d9cbe8;
+  --panel:rgba(239,240,241,.94); --panel-fg:#232629;
+  --surface:#fcfcfc; --surface-2:#f0f1f2; --fg:#232629; --muted:#676d73; --line:#d4d8db;
+  --accent:#1d99db; --accent-soft:rgba(61,174,233,.16);
+  --ok:#27ae60; --warn:#f67400; --bad:#da4453; --off:#9aa0a6;
+  --shadow:0 10px 30px rgba(20,30,40,.22);
+  --sans:"Noto Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono:"Noto Sans Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --page:#191b1d; --wall1:#1c3850; --wall2:#3b2c52;
+  --panel:rgba(32,35,38,.95); --panel-fg:#fcfcfc;
+  --surface:#2a2e32; --surface-2:#31363b; --fg:#f2f3f4; --muted:#a2aab1; --line:#434a50;
+  --accent:#3daee9; --accent-soft:rgba(61,174,233,.2);
+  --ok:#2ecc71; --warn:#f67400; --bad:#ef5b6b; --off:#7c838a;
+  --shadow:0 10px 30px rgba(0,0,0,.55); color-scheme:dark;
+} }
+:root[data-theme="dark"] {
+  --page:#191b1d; --wall1:#1c3850; --wall2:#3b2c52;
+  --panel:rgba(32,35,38,.95); --panel-fg:#fcfcfc;
+  --surface:#2a2e32; --surface-2:#31363b; --fg:#f2f3f4; --muted:#a2aab1; --line:#434a50;
+  --accent:#3daee9; --accent-soft:rgba(61,174,233,.2);
+  --ok:#2ecc71; --warn:#f67400; --bad:#ef5b6b; --off:#7c838a;
+  --shadow:0 10px 30px rgba(0,0,0,.55); color-scheme:dark;
+}
+* { box-sizing:border-box; }
+body { background:var(--page); color:var(--fg); font-family:var(--sans); font-size:14px; line-height:1.45; }
+.wrap { max-width:1180px; margin:0 auto; padding-block:28px 40px;
+  padding-left:max(16px, env(safe-area-inset-left, 0px)); padding-right:max(16px, env(safe-area-inset-right, 0px)); }
+h1 { font-size:1.6rem; margin:0 0 4px; text-wrap:balance; font-weight:700; }
+.lead { margin:0 0 20px; color:var(--muted); max-width:70ch; }
+.layout { display:grid; grid-template-columns:minmax(0,1fr) 290px; gap:24px; align-items:start; }
+@media (max-width:900px) { .layout { grid-template-columns:minmax(0,1fr); } }
+button, input, select, textarea { font:inherit; color:inherit; }
+button { cursor:pointer; }
+:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.ic { display:block; flex:none; }
+code, .mono { font-family:var(--mono); font-size:.86em; }
+
+/* desktop stage */
+.desk { position:relative; height:620px; border-radius:10px; overflow:hidden; border:1px solid var(--line);
+  background:radial-gradient(120% 90% at 15% 10%, var(--wall2), transparent 60%), linear-gradient(160deg, var(--wall1), var(--wall2)); }
+.panel { position:absolute; left:0; right:0; bottom:0; height:44px; background:var(--panel); color:var(--panel-fg);
+  display:flex; align-items:center; gap:4px; padding:0 6px; border-top:1px solid var(--line); }
+.p-item { width:36px; height:36px; display:grid; place-items:center; border-radius:5px; opacity:.85; }
+.p-task { width:28px; height:28px; border-radius:6px; background:var(--line); margin:0 4px; }
+.p-spacer { flex:1; }
+.tray { display:flex; align-items:center; gap:2px; }
+.tray-btn { position:relative; width:36px; height:36px; display:grid; place-items:center; border:0; border-radius:5px;
+  background:transparent; color:var(--panel-fg); }
+.tray-btn:hover, .tray-btn.open { background:var(--accent-soft); }
+.tray-btn .tdot { position:absolute; right:5px; bottom:5px; width:10px; height:10px; border-radius:50%;
+  border:2px solid var(--panel-solid, var(--surface)); }
+.tray-btn .ring { position:absolute; inset:3px; border-radius:50%; border:2px solid transparent; border-top-color:var(--accent); animation:spin .9s linear infinite; }
+.clock { font-size:12px; text-align:center; line-height:1.2; padding:0 8px; font-variant-numeric:tabular-nums; }
+.tip { position:absolute; right:8px; bottom:52px; background:var(--surface); color:var(--fg); border:1px solid var(--line);
+  border-radius:6px; box-shadow:var(--shadow); padding:8px 12px; min-width:200px; font-size:13px; }
+.tip strong { display:block; margin-bottom:4px; }
+.tip div { display:flex; align-items:center; gap:8px; }
+
+/* popup */
+.popup { position:absolute; right:8px; bottom:52px; width:min(400px, calc(100% - 16px)); max-height:calc(100% - 64px);
+  background:var(--surface); border:1px solid var(--line); border-radius:8px; box-shadow:var(--shadow); display:flex; flex-direction:column; overflow:hidden; }
+.pop-head { display:flex; align-items:center; gap:4px; padding:8px 8px 8px 14px; border-bottom:1px solid var(--line); }
+.pop-head h2 { font-size:15px; margin:0; flex:1; font-weight:600; }
+.tool { width:30px; height:30px; display:grid; place-items:center; border:0; border-radius:4px; background:transparent; color:var(--fg); }
+.tool:hover { background:var(--accent-soft); }
+.pop-body { overflow:auto; padding:4px 0; }
+.srv { padding:12px 14px; display:flex; flex-direction:column; gap:8px; }
+.srv + .srv { border-top:1px solid var(--line); }
+.srv-head { display:flex; align-items:center; gap:10px; }
+.srv-name { flex:1; min-width:0; display:flex; flex-direction:column; }
+.srv-name strong { font-weight:600; }
+.name-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.badge { font-size:11px; font-weight:500; padding:0 7px; border-radius:9px; background:var(--accent-soft); color:var(--accent); white-space:nowrap; }
+.sub { color:var(--muted); font-size:12px; font-family:var(--mono); }
+.srv-state { font-size:12px; color:var(--muted); text-align:right; font-variant-numeric:tabular-nums; }
+.srv-state.on { color:var(--ok); } .srv-state.busy { color:var(--accent); }
+.dot { width:10px; height:10px; border-radius:50%; flex:none; background:var(--off); }
+.dot.on { background:var(--ok); box-shadow:0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent); }
+.dot.warn { background:var(--warn); }
+.dot.busy { background:var(--accent); animation:pulse 1s ease-in-out infinite; }
+.dot.unk { background:transparent; border:2px solid var(--off); }
+.acts { display:flex; flex-wrap:wrap; gap:6px; padding-left:20px; }
+.btn { display:inline-flex; align-items:center; gap:6px; padding:5px 10px; border:1px solid var(--line); border-radius:4px;
+  background:var(--surface-2); color:var(--fg); font-size:13px; }
+.btn:hover:not(:disabled) { border-color:var(--accent); background:var(--accent-soft); }
+.btn:disabled { opacity:.45; cursor:not-allowed; }
+.btn.care { color:var(--bad); }
+.btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+.btn.danger { background:var(--bad); border-color:var(--bad); color:#fff; }
+.tog { display:flex; align-items:center; gap:8px; padding-left:20px; min-height:28px; }
+.tog-label { flex:1; display:flex; align-items:center; gap:6px; min-width:0; }
+.tog-label.dim { opacity:.5; }
+.sw { position:relative; width:36px; height:20px; border-radius:10px; border:1px solid var(--line); background:var(--surface-2); padding:0; flex:none; }
+.sw::after { content:""; position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%; background:var(--off); transition:left .15s; }
+.sw.on { background:var(--accent); border-color:var(--accent); }
+.sw.on::after { left:18px; background:#fff; }
+.sw.unk::after { left:10px; opacity:.5; }
+.sw:disabled { opacity:.45; cursor:not-allowed; }
+.res { font-size:12px; display:flex; gap:5px; align-items:baseline; padding-left:20px; animation:fadein .2s ease-out; }
+.res.inline { padding-left:0; }
+.res.ok { color:var(--ok); } .res.err { color:var(--bad); }
+.res code { color:var(--muted); word-break:break-word; }
+.spin { width:14px; height:14px; border-radius:50%; border:2px solid var(--line); border-top-color:var(--accent); animation:spin .8s linear infinite; flex:none; }
+
+/* confirm inside popup */
+.scrim { position:absolute; inset:0; background:rgba(0,0,0,.35); display:grid; place-items:center; padding:16px; }
+.dialog { background:var(--surface); border:1px solid var(--line); border-radius:8px; box-shadow:var(--shadow); padding:16px; max-width:340px; width:100%; }
+.dialog h3 { margin:0 0 6px; font-size:15px; }
+.dialog p { margin:0 0 14px; color:var(--muted); }
+.dialog .row { display:flex; justify-content:flex-end; gap:8px; }
+
+/* side column */
+.side { display:flex; flex-direction:column; gap:16px; }
+.box { background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:14px 16px; }
+.box h2 { font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 10px; font-weight:600; }
+.box ol, .box ul { margin:0; padding-left:18px; display:flex; flex-direction:column; gap:6px; }
+.legend { list-style:none; padding:0 !important; }
+.legend li { display:flex; align-items:center; gap:8px; }
+.check { display:flex; gap:8px; align-items:center; margin-bottom:10px; }
+.note { color:var(--muted); font-size:12px; margin:10px 0 0; }
+
+/* settings window */
+.modal { position:fixed; inset:0; background:rgba(0,0,0,.4); display:grid; place-items:center; z-index:20;
+  padding:max(12px, env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) max(12px, env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px)); }
+.win { width:min(900px, 100%); height:min(640px, 100%); background:var(--surface); border:1px solid var(--line); border-radius:8px;
+  box-shadow:var(--shadow); display:flex; flex-direction:column; overflow:hidden; }
+.win-title { display:flex; align-items:center; padding:8px 8px 8px 14px; border-bottom:1px solid var(--line); background:var(--surface-2); font-weight:600; }
+.win-title span { flex:1; }
+.win-main { flex:1; display:flex; min-height:0; }
+.cnav { width:150px; border-right:1px solid var(--line); padding:8px; display:flex; flex-direction:column; gap:2px; flex:none; }
+.cnav button { text-align:left; border:0; background:transparent; padding:7px 10px; border-radius:4px; display:flex; gap:8px; align-items:center; }
+.cnav button.sel { background:var(--accent-soft); color:var(--fg); font-weight:600; }
+.cbody { flex:1; overflow:auto; padding:16px; min-width:0; }
+.win-foot { display:flex; justify-content:flex-end; gap:8px; padding:10px 14px; border-top:1px solid var(--line); }
+@media (max-width:640px) { .win-main { flex-direction:column; } .cnav { width:auto; flex-direction:row; border-right:0; border-bottom:1px solid var(--line); } }
+.cfg-grid { display:grid; grid-template-columns:180px minmax(0,1fr); gap:16px; }
+@media (max-width:760px) { .cfg-grid { grid-template-columns:minmax(0,1fr); } }
+.col-head { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 6px; font-weight:600; }
+.pick { list-style:none; margin:0 0 8px; padding:0; border:1px solid var(--line); border-radius:6px; overflow:hidden; }
+.pick li { display:flex; align-items:center; gap:8px; padding:7px 10px; cursor:pointer; }
+.pick li + li { border-top:1px solid var(--line); }
+.pick li:hover { background:var(--surface-2); }
+.pick li.sel { background:var(--accent-soft); }
+.pick .grow { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.chip { font-size:11px; padding:1px 7px; border-radius:9px; background:var(--surface-2); border:1px solid var(--line); color:var(--muted); white-space:nowrap; }
+.chip.care { color:var(--bad); }
+.row-btns { display:flex; gap:6px; flex-wrap:wrap; }
+.mini { width:26px; height:26px; display:grid; place-items:center; border:1px solid transparent; border-radius:4px; background:transparent; }
+.mini:hover { border-color:var(--line); background:var(--surface); }
+.section { display:flex; flex-direction:column; gap:10px; margin-bottom:20px; }
+.section-head { display:flex; align-items:center; gap:8px; justify-content:space-between; flex-wrap:wrap; }
+.fields { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:10px 14px; }
+@media (max-width:560px) { .fields { grid-template-columns:minmax(0,1fr); } }
+.field { display:flex; flex-direction:column; gap:4px; min-width:0; }
+.field.full { grid-column:1 / -1; }
+.field label { font-size:12px; color:var(--muted); font-weight:500; }
+.field input[type=text], .field input[type=number], .field select, textarea {
+  padding:6px 8px; border:1px solid var(--line); border-radius:4px; background:var(--surface); width:100%; min-width:0; }
+.field input.mono { font-family:var(--mono); font-size:13px; }
+.preview { font-family:var(--mono); font-size:11.5px; color:var(--muted); word-break:break-all; white-space:pre-wrap; }
+.preview.warn { color:var(--warn); }
+.inline-check { display:flex; align-items:center; gap:8px; }
+.editor { border:1px solid var(--line); border-radius:6px; padding:14px; background:var(--surface-2); }
+.empty { color:var(--muted); padding:20px; text-align:center; border:1px dashed var(--line); border-radius:6px; }
+.later { opacity:.55; }
+textarea { font-family:var(--mono); font-size:12px; min-height:220px; resize:vertical; }
+.err-line { color:var(--bad); font-size:12px; }
+
+@keyframes spin { to { transform:rotate(360deg); } }
+@keyframes pulse { 50% { opacity:.35; } }
+@keyframes fadein { from { opacity:0; transform:translateY(-2px); } }
+@media (prefers-reduced-motion: reduce) { * { animation-duration:2.5s !important; transition:none !important; } }
+</style>
+
+<div class="wrap">
+  <h1>Server Control mockup</h1>
+  <p class="lead">A clickable sketch of the Plasma widget. The panel at the bottom is your taskbar. Commands are simulated, so nothing leaves this page.</p>
+
+  <div class="layout">
+    <div class="desk" id="desk">
+      <div class="tip" id="tip" hidden></div>
+
+      <div class="popup" id="popup" hidden>
+        <div class="pop-head">
+          <h2>Server Control</h2>
+          <span class="badge" id="tsHead" hidden>Tailscale active</span>
+          <button class="tool" id="btnRefresh" title="Refresh status" aria-label="Refresh status"></button>
+          <button class="tool" id="btnConfig" title="Configure Server Control…" aria-label="Configure"></button>
+        </div>
+        <div class="pop-body" id="list"></div>
+        <div class="scrim" id="confirm" hidden></div>
+      </div>
+
+      <div class="panel">
+        <div class="p-item" id="launcher"></div>
+        <div class="p-task"></div><div class="p-task"></div><div class="p-task"></div>
+        <div class="p-spacer"></div>
+        <div class="tray">
+          <div class="p-item" id="trayVol"></div>
+          <div class="p-item" id="trayNet"></div>
+          <button class="tray-btn" id="trayBtn" aria-label="Server Control" aria-expanded="false"></button>
+        </div>
+        <div class="clock">20:41<br>29.10.2026</div>
+      </div>
+    </div>
+
+    <aside class="side">
+      <div class="box">
+        <h2>Try this</h2>
+        <ol>
+          <li>Hover the server icon in the panel to see the tooltip.</li>
+          <li>Click it to open the popup. The flags are read again each time it opens.</li>
+          <li>Wake <b>Backup</b> and watch it come online.</li>
+          <li>Power off <b>Media</b>. It asks first.</li>
+          <li>Turn on "Make the next command fail" below, then click any function.</li>
+          <li>Turn on "Tailscale active" below. NAS and Backup switch to their Tailscale addresses, Wake is disabled, and Media (no Tailscale address) can't be reached.</li>
+          <li>Open the settings with the gear icon in the popup.</li>
+        </ol>
+      </div>
+      <div class="box">
+        <h2>Panel dot</h2>
+        <ul class="legend">
+          <li><span class="dot on"></span>All servers online</li>
+          <li><span class="dot warn"></span>Some servers online</li>
+          <li><span class="dot"></span>No server online</li>
+          <li><span class="spin"></span>A command is running</li>
+        </ul>
+      </div>
+      <div class="box">
+        <h2>Simulation</h2>
+        <label class="check"><input type="checkbox" id="failNext"> Make the next command fail</label>
+        <label class="check"><input type="checkbox" id="tsOn"> Tailscale active (away from home)</label>
+        <button class="btn" id="btnReset">Reset mockup</button>
+        <p class="note">Wake takes about 7 s, shutdown about 6 s, reboot about 12 s.</p>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<div class="modal" id="settings" hidden>
+  <div class="win" role="dialog" aria-modal="true" aria-labelledby="winTitle">
+    <div class="win-title"><span id="winTitle">Configure Server Control</span><button class="tool" id="winClose" aria-label="Close"></button></div>
+    <div class="win-main">
+      <nav class="cnav" id="cnav">
+        <button data-page="servers" id="nav-servers"></button>
+        <button data-page="general" id="nav-general"></button>
+      </nav>
+      <div class="cbody" id="cbody"></div>
+    </div>
+    <div class="win-foot">
+      <button class="btn primary" id="cfgOk">OK</button>
+      <button class="btn" id="cfgApply">Apply</button>
+      <button class="btn" id="cfgCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const I = {
+  server:'<rect x="3.5" y="4" width="17" height="7" rx="1.5"/><rect x="3.5" y="13" width="17" height="7" rx="1.5"/><path d="M7.5 7.5h.01M7.5 16.5h.01M11 7.5h6M11 16.5h6"/>',
+  settings:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+  refresh:'<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>',
+  power:'<path d="M12 3v9"/><path d="M6.3 6.3a8 8 0 1 0 11.4 0"/>',
+  wake:'<path d="M12 3v4M4.6 9.6l2.8 2.8M19.4 9.6l-2.8 2.8M3 20h18M7 20a5 5 0 0 1 10 0"/>',
+  reboot:'<path d="M4 12a8 8 0 1 0 2.3-5.7"/><path d="M4 4v5h5"/>',
+  run:'<path d="M8 5v14l11-7z"/>',
+  flag:'<path d="M5 21V4h12l-2.5 4.5L17 13H5"/>',
+  alarm:'<circle cx="12" cy="13" r="7"/><path d="M12 9v4l2.5 2M5 4 3 6M19 4l2 2"/>',
+  status:'<circle cx="12" cy="12" r="3"/><path d="M6.3 6.3a8 8 0 0 0 0 11.4M17.7 6.3a8 8 0 0 1 0 11.4"/>',
+  up:'<path d="M6 15l6-6 6 6"/>', down:'<path d="M6 9l6 6 6-6"/>',
+  trash:'<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>', check:'<path d="M5 12l5 5L20 7"/>', x:'<path d="M6 6l12 12M18 6 6 18"/>',
+  menu:'<rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/>',
+  vol:'<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 9a4 4 0 0 1 0 6"/>',
+  net:'<path d="M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0M12 19.5h.01"/>',
+  list:'<path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/>'
+};
+const ICON_CHOICES = ['status','wake','power','reboot','flag','alarm','run','server'];
+const icon = (n, s=16) => `<svg class="ic" viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${I[n] || I.run}</svg>`;
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const clone = o => JSON.parse(JSON.stringify(o));
+const $ = id => document.getElementById(id);
+
+let uid = 0;
+const nid = p => p + (++uid) + Math.random().toString(36).slice(2, 6);
+const FLAGDIR = '/etc/auto-shutdown';
+const TPL = {
+  status: () => ({ type:'status', name:'Online', icon:'status', command:'ping -c 1 -W 1 {host}', interval:30 }),
+  wake: () => ({ type:'action', name:'Wake', icon:'wake', command:'wakeonlan {mac}', verifyCommand:'', availableWhen:'offline', confirm:false, timeout:10 }),
+  poweroff: () => ({ type:'action', name:'Power off', icon:'power', command:'{ssh} sudo systemctl poweroff', verifyCommand:'', availableWhen:'online', confirm:true, timeout:10 }),
+  reboot: () => ({ type:'action', name:'Reboot', icon:'reboot', command:'{ssh} sudo systemctl reboot', verifyCommand:'', availableWhen:'online', confirm:true, timeout:10 }),
+  flag: (name='Flag', path='/path/to/flag', ic='flag') => ({ type:'toggle', name, icon:ic, stateCommand:`{ssh} test -f ${path}`, onCommand:`{ssh} touch ${path}`, offCommand:`{ssh} rm -f ${path}`, availableWhen:'online', confirm:false, timeout:10 }),
+  custom: () => ({ type:'action', name:'Custom', icon:'run', command:'', verifyCommand:'', availableWhen:'always', confirm:false, timeout:10 })
+};
+const mk = (t, ...a) => Object.assign({ id:nid('f') }, TPL[t](...a));
+const srvFns = () => [mk('status'), mk('wake'),
+  mk('flag','Skip shutdown tonight', FLAGDIR + '/skip-shutdown', 'flag'),
+  mk('flag','Skip wake tomorrow', FLAGDIR + '/skip-alarm', 'alarm'), mk('poweroff')];
+
+let config, general, rt, frt, remote, popupOpen = false, failNext = false, ticker = null, tailscale = false;
+
+function initState() {
+  config = [
+    { id:'nas', name:'NAS', host:'192.168.1.10', tailscaleHost:'nas.tail4c2e.ts.net', mac:'b4:2e:99:0a:11:01', user:'admin', functions:srvFns() },
+    { id:'backup', name:'Backup', host:'192.168.1.11', tailscaleHost:'100.88.14.27', mac:'b4:2e:99:0a:11:02', user:'admin', functions:srvFns() },
+    { id:'media', name:'Media', host:'192.168.1.12', tailscaleHost:'', mac:'70:85:c2:4f:9e:10', user:'media', functions:[mk('status'), mk('wake'), mk('reboot'), mk('poweroff')] }
+  ];
+  general = { interval:30, sshOptions:'-o BatchMode=yes -o ConnectTimeout=5', tsDetect:`tailscale status --json | grep -q '"BackendState": *"Running"'` };
+  rt = { nas:{ online:true }, backup:{ online:false }, media:{ online:true } };
+  frt = {}; remote = {};
+  for (const s of config) for (const f of s.functions) {
+    frt[f.id] = { busy:false, state:null, result:null };
+    if (f.type === 'toggle') remote[f.id] = s.id === 'nas' && f.name.startsWith('Skip wake');
+    if (f.type === 'toggle' && rt[s.id].online) frt[f.id].state = remote[f.id];
+  }
+}
+
+const hasStatus = s => s.functions.some(f => f.type === 'status');
+const viaTs = s => tailscale && !!s.tailscaleHost;
+const unreachable = s => tailscale && !s.tailscaleHost;
+const isOnline = s => !unreachable(s) && !!rt[s.id].online;
+const addr = s => viaTs(s) ? s.tailscaleHost : s.host;
+const usesMac = f => [f.command, f.verifyCommand, f.stateCommand, f.onCommand, f.offCommand].some(c => (c || '').includes('{mac}'));
+const anyBusy = () => Object.values(frt).some(x => x.busy) || Object.values(rt).some(r => r.phase || r.checking);
+
+function available(s, f) {
+  const r = rt[s.id];
+  if (frt[f.id]?.busy) return { ok:false, why:'Running…' };
+  if (tailscale && usesMac(f)) return { ok:false, why:'Wake-on-LAN needs the local network' };
+  if (unreachable(s)) return { ok:false, why:`${s.name} has no Tailscale address` };
+  if (r.phase) return { ok:false, why:`Wait until ${s.name} has finished ${r.phase === 'waking' ? 'starting' : r.phase === 'stopping' ? 'shutting down' : 'rebooting'}` };
+  if (f.availableWhen === 'always' || !hasStatus(s)) return { ok:true };
+  if (f.availableWhen === 'online' && !isOnline(s)) return { ok:false, why:`Available when ${s.name} is online` };
+  if (f.availableWhen === 'offline' && isOnline(s)) return { ok:false, why:`Available when ${s.name} is offline` };
+  return { ok:true };
+}
+
+function serverState(s) {
+  const r = rt[s.id];
+  const secs = r.since ? Math.floor((Date.now() - r.since) / 1000) : 0;
+  const t = `0:${String(secs).padStart(2, '0')}`;
+  if (!hasStatus(s)) return { dot:'unk', text:'No status check', cls:'' };
+  if (unreachable(s)) return { dot:'unk', text:'Not reachable<br>no Tailscale address', cls:'' };
+  if (r.phase === 'waking') return { dot:'busy', text:`Starting… ${t}<br>checking every 5 s`, cls:'busy' };
+  if (r.phase === 'stopping') return { dot:'busy', text:`Shutting down… ${t}<br>checking every 5 s`, cls:'busy' };
+  if (r.phase === 'rebooting') return { dot:'busy', text:`Rebooting… ${t}<br>checking every 5 s`, cls:'busy' };
+  if (r.checking) return { dot:'busy', text:'Checking…', cls:'busy' };
+  if (r.online === null || r.online === undefined) return { dot:'unk', text:'Unknown', cls:'' };
+  return r.online ? { dot:'on', text:'Online', cls:'on' } : { dot:'', text:'Offline', cls:'' };
+}
+
+function resultHTML(f, inline) {
+  const res = frt[f.id]?.result; if (!res) return '';
+  return res.ok
+    ? `<div class="res ok ${inline ? 'inline' : ''}">${icon('check', 12)}<span>${esc(res.msg)}</span></div>`
+    : `<div class="res err ${inline ? 'inline' : ''}">${icon('x', 12)}<span>${esc(res.msg)} <code>${esc(res.stderr)}</code></span></div>`;
+}
+
+function renderList() {
+  if (!config.length) { $('list').innerHTML = `<div class="srv"><div class="empty">No servers configured yet. Open the settings to add one.</div></div>`; return; }
+  $('list').innerHTML = config.map(s => {
+    const st = serverState(s);
+    const acts = s.functions.filter(f => f.type === 'action');
+    const togs = s.functions.filter(f => f.type === 'toggle');
+    const actBtns = acts.map(f => {
+      const a = available(s, f), busy = frt[f.id]?.busy;
+      return `<button class="btn ${f.confirm ? 'care' : ''}" data-s="${s.id}" data-f="${f.id}" ${a.ok ? '' : 'disabled'} title="${esc(a.ok ? (f.confirm ? 'Asks for confirmation first' : f.name) : a.why)}">${busy ? '<span class="spin"></span>' : icon(f.icon, 14)}${esc(f.name)}</button>`;
+    }).join('');
+    const togRows = togs.map(f => {
+      const a = available(s, f), x = frt[f.id] || {};
+      const unk = x.state === null || x.state === undefined;
+      const title = a.ok ? (unk ? 'State unknown' : (x.state ? 'On: click to remove the flag' : 'Off: click to set the flag')) : a.why;
+      const ctrl = x.busy ? '<span class="spin" style="margin:3px 11px"></span>'
+        : `<button class="sw ${x.state ? 'on' : ''} ${unk ? 'unk' : ''}" role="switch" aria-checked="${!!x.state}" aria-label="${esc(f.name)}" data-s="${s.id}" data-f="${f.id}" ${a.ok && !unk ? '' : 'disabled'} title="${esc(title)}"></button>`;
+      return `<div class="tog"><span class="tog-label ${a.ok ? '' : 'dim'}">${icon(f.icon, 14)}<span>${esc(f.name)}</span></span>${resultHTML(f, true)}${ctrl}</div>`;
+    }).join('');
+    return `<section class="srv">
+      <div class="srv-head"><span class="dot ${st.dot}"></span>
+        <div class="srv-name"><div class="name-row"><strong>${esc(s.name)}</strong>${viaTs(s) ? '<span class="badge">via Tailscale</span>' : ''}</div><span class="sub">${esc(s.user)}@${esc(addr(s))}</span></div>
+        <span class="srv-state ${st.cls}">${st.text}</span></div>
+      ${acts.length ? `<div class="acts">${actBtns}</div>` : ''}
+      ${acts.map(f => resultHTML(f, false)).join('')}
+      ${togRows}
+    </section>`;
+  }).join('');
+}
+
+function renderTray() {
+  const withStatus = config.filter(hasStatus);
+  const on = withStatus.filter(isOnline).length;
+  const color = !withStatus.length || on === 0 ? 'var(--off)' : on === withStatus.length ? 'var(--ok)' : 'var(--warn)';
+  const btn = $('trayBtn');
+  btn.innerHTML = `${icon('server', 22)}<span class="tdot" style="background:${color}"></span>${anyBusy() ? '<span class="ring"></span>' : ''}`;
+  btn.classList.toggle('open', popupOpen);
+  btn.setAttribute('aria-expanded', popupOpen);
+  $('tip').innerHTML = `<strong>Server Control</strong>` + (config.length ? config.map(s => {
+    const st = serverState(s);
+    return `<div><span class="dot ${st.dot}"></span>${esc(s.name)}: ${st.text.split('<br>')[0]}${viaTs(s) ? ' (via Tailscale)' : ''}</div>`;
+  }).join('') : '<div>No servers configured</div>');
+}
+
+function renderAll() { $('tsHead').hidden = !tailscale; if (popupOpen) renderList(); renderTray(); }
+
+function ensureTicker() {
+  if (ticker) return;
+  ticker = setInterval(() => {
+    if (!Object.values(rt).some(r => r.phase)) { clearInterval(ticker); ticker = null; }
+    renderAll();
+  }, 1000);
+}
+
+function setResult(f, res) {
+  frt[f.id].result = res;
+  const token = res.t = Date.now();
+  setTimeout(() => { if (frt[f.id] && frt[f.id].result?.t === token) { frt[f.id].result = null; renderAll(); } }, res.ok ? 5000 : 9000);
+}
+
+function simulate(ms, stderr) {
+  return new Promise(res => setTimeout(() => {
+    if (failNext) { failNext = false; $('failNext').checked = false; res({ ok:false, stderr }); }
+    else res({ ok:true });
+  }, ms));
+}
+
+function refreshToggles(s) {
+  for (const f of s.functions.filter(f => f.type === 'toggle')) {
+    frt[f.id].busy = true;
+    setTimeout(() => { frt[f.id].busy = false; frt[f.id].state = remote[f.id] ?? false; renderAll(); }, 500 + Math.random() * 500);
+  }
+  renderAll();
+}
+
+function startPhase(s, phase) {
+  const r = rt[s.id]; r.phase = phase; r.since = Date.now(); ensureTicker();
+  if (phase === 'waking') setTimeout(() => { r.phase = null; r.online = true; renderAll(); refreshToggles(s); }, 7000);
+  if (phase === 'stopping') setTimeout(() => { r.phase = null; r.online = false; clearToggles(s); renderAll(); }, 6000);
+  if (phase === 'rebooting') {
+    setTimeout(() => { r.online = false; clearToggles(s); renderAll(); }, 4000);
+    setTimeout(() => { r.phase = null; r.online = true; renderAll(); refreshToggles(s); }, 12000);
+  }
+  renderAll();
+}
+function clearToggles(s) { for (const f of s.functions) if (f.type === 'toggle') frt[f.id].state = null; }
+
+async function execute(s, f) {
+  const x = frt[f.id]; x.busy = true; x.result = null; renderAll();
+  const ssh = f.command?.includes('{ssh}') || f.onCommand?.includes('{ssh}');
+  const stderr = ssh ? `ssh: connect to host ${addr(s)} port 22: Connection timed out (exit 255)` : `${(f.command || '').split(' ')[0] || 'command'}: command not found (exit 127)`;
+  const res = await simulate(900, stderr);
+  if (!res.ok) { x.busy = false; setResult(f, { ok:false, msg:`${f.name} failed:`, stderr:res.stderr }); renderAll(); return; }
+  if (f.type === 'toggle') {
+    remote[f.id] = !x.state;
+    await new Promise(r => setTimeout(r, 450));
+    x.state = remote[f.id]; x.busy = false;
+    setResult(f, { ok:true, msg: x.state ? 'Set' : 'Removed' });
+  } else {
+    x.busy = false;
+    const cmd = f.command || '';
+    if (cmd.includes('wakeonlan')) { setResult(f, { ok:true, msg:`${f.name}: magic packet sent` }); startPhase(s, 'waking'); }
+    else if (cmd.includes('poweroff')) { setResult(f, { ok:true, msg:`${f.name}: shutdown started` }); startPhase(s, 'stopping'); }
+    else if (cmd.includes('reboot')) { setResult(f, { ok:true, msg:`${f.name}: reboot started` }); startPhase(s, 'rebooting'); }
+    else setResult(f, { ok:true, msg:`${f.name}: done` });
+  }
+  if (f.type === 'action' && !/wakeonlan|poweroff|reboot/.test(f.command || '')) refreshToggles(s);
+  renderAll();
+}
+
+function confirmRun(s, f) {
+  const c = $('confirm');
+  const what = /poweroff/.test(f.command) ? `${s.name} will shut down. It stays off until it is woken again.`
+    : /reboot/.test(f.command) ? `${s.name} will restart and be unreachable for a moment.`
+    : `This runs "${f.name}" on ${s.name}.`;
+  c.innerHTML = `<div class="dialog" role="alertdialog" aria-labelledby="cfTitle">
+    <h3 id="cfTitle">${esc(f.name)} ${esc(s.name)}?</h3>
+    <p>${esc(what)}<br><span class="sub">${esc(s.user)}@${esc(addr(s))}</span></p>
+    <div class="row"><button class="btn" id="cfNo">Cancel</button><button class="btn danger" id="cfYes">${icon(f.icon, 14)}${esc(f.name)}</button></div></div>`;
+  c.hidden = false;
+  $('cfNo').focus();
+  $('cfNo').onclick = () => { c.hidden = true; };
+  $('cfYes').onclick = () => { c.hidden = true; execute(s, f); };
+}
+
+$('list').addEventListener('click', e => {
+  const b = e.target.closest('button[data-f]'); if (!b || b.disabled) return;
+  const s = config.find(x => x.id === b.dataset.s), f = s?.functions.find(x => x.id === b.dataset.f);
+  if (!f) return;
+  if (f.confirm) confirmRun(s, f); else execute(s, f);
+});
+
+function openPopup() {
+  popupOpen = true; $('popup').hidden = false; $('tip').hidden = true;
+  for (const s of config) if (isOnline(s) && !rt[s.id].phase) refreshToggles(s);
+  renderAll();
+}
+function closePopup() { popupOpen = false; $('popup').hidden = true; $('confirm').hidden = true; renderTray(); }
+
+$('trayBtn').addEventListener('click', e => { e.stopPropagation(); popupOpen ? closePopup() : openPopup(); });
+$('trayBtn').addEventListener('mouseenter', () => { if (!popupOpen) $('tip').hidden = false; });
+$('trayBtn').addEventListener('mouseleave', () => { $('tip').hidden = true; });
+$('desk').addEventListener('click', e => {
+  // composedPath is fixed at dispatch time, so clicks on buttons the list re-rendered still count as inside the popup
+  const path = e.composedPath();
+  if (popupOpen && !path.includes($('popup')) && !path.includes($('trayBtn'))) closePopup();
+});
+$('btnRefresh').addEventListener('click', () => {
+  for (const s of config) if (hasStatus(s) && !rt[s.id].phase) rt[s.id].checking = true;
+  renderAll();
+  setTimeout(() => { for (const s of config) rt[s.id].checking = false; renderAll(); }, 800);
+});
+$('btnConfig').addEventListener('click', openSettings);
+$('failNext').addEventListener('change', e => { failNext = e.target.checked; });
+$('tsOn').addEventListener('change', e => {
+  tailscale = e.target.checked;
+  for (const s of config) {
+    if (unreachable(s)) clearToggles(s);
+    else if (popupOpen && isOnline(s) && !rt[s.id].phase) refreshToggles(s);
+  }
+  renderAll();
+});
+$('btnReset').addEventListener('click', () => { tailscale = false; $('tsOn').checked = false; initState(); closePopup(); renderAll(); });
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if (!$('settings').hidden) closeSettings();
+  else if (!$('confirm').hidden) $('confirm').hidden = true;
+  else if (popupOpen) closePopup();
+});
+
+/* ---------- settings ---------- */
+let draft, dGeneral, ss;
+const KNOWN = ['host','lanhost','tshost','mac','user','name','ssh'];
+
+function expand(cmd, s, gen, ts = false) {
+  const vals = { host: ts ? s.tailscaleHost : s.host, lanhost:s.host, tshost:s.tailscaleHost, mac:s.mac, user:s.user, name:s.name };
+  return String(cmd || '').replace(/\{ssh\}/g, `ssh ${gen.sshOptions} {user}@{host}`)
+    .replace(/\{(\w+)\}/g, (m, k) => k in vals ? (vals[k] || m) : m);
+}
+function unknownPh(cmd) { return [...String(cmd || '').matchAll(/\{(\w+)\}/g)].map(m => m[1]).filter(k => !KNOWN.includes(k)); }
+
+function openSettings() {
+  draft = clone(config); dGeneral = clone(general);
+  ss = { page:'servers', s: config.length ? 0 : -1, f:null, json:false };
+  closePopup(); $('settings').hidden = false; renderSettings(); $('winClose').focus();
+}
+function closeSettings() { $('settings').hidden = true; }
+function applySettings() {
+  config = clone(draft); general = clone(dGeneral);
+  for (const s of config) {
+    if (!rt[s.id]) rt[s.id] = { online:false };
+    for (const f of s.functions) {
+      if (!frt[f.id]) frt[f.id] = { busy:false, state:null, result:null };
+      if (f.type === 'toggle' && remote[f.id] === undefined) remote[f.id] = false;
+      if (f.type === 'toggle' && rt[s.id].online && frt[f.id].state === null) frt[f.id].state = remote[f.id];
+    }
+  }
+  renderAll();
+}
+
+function renderSettings() {
+  $('nav-servers').innerHTML = icon('server', 16) + 'Servers';
+  $('nav-general').innerHTML = icon('settings', 16) + 'General';
+  for (const b of $('cnav').children) b.classList.toggle('sel', b.dataset.page === ss.page);
+  ss.page === 'servers' ? renderServersPage() : renderGeneralPage();
+}
+
+function renderServersPage() {
+  $('cbody').innerHTML = `
+    <div class="cfg-grid">
+      <div>
+        <div class="col-head">Servers</div>
+        <ul class="pick" id="srvList"></ul>
+        <div class="row-btns">
+          <button class="btn" id="srvAdd">${icon('plus', 14)}Add</button>
+          <button class="mini" id="srvUp" title="Move up" aria-label="Move up">${icon('up', 14)}</button>
+          <button class="mini" id="srvDown" title="Move down" aria-label="Move down">${icon('down', 14)}</button>
+          <button class="mini" id="srvDel" title="Remove server" aria-label="Remove server">${icon('trash', 14)}</button>
+        </div>
+      </div>
+      <div id="srvMain" style="min-width:0"></div>
+    </div>`;
+  renderSrvList(); renderSrvMain();
+
+  $('srvAdd').onclick = () => {
+    draft.push({ id:nid('s'), name:'New server', host:'', tailscaleHost:'', mac:'', user:'', functions:[mk('status'), mk('wake'), mk('poweroff')] });
+    ss.s = draft.length - 1; ss.f = null; renderServersPage(); $('cfg-name')?.focus();
+  };
+  $('srvDel').onclick = () => { if (ss.s < 0) return; draft.splice(ss.s, 1); ss.s = Math.min(ss.s, draft.length - 1); ss.f = null; renderServersPage(); };
+  $('srvUp').onclick = () => moveSrv(-1); $('srvDown').onclick = () => moveSrv(1);
+}
+function moveSrv(d) {
+  const j = ss.s + d; if (ss.s < 0 || j < 0 || j >= draft.length) return;
+  [draft[ss.s], draft[j]] = [draft[j], draft[ss.s]]; ss.s = j; renderServersPage();
+}
+function renderSrvList() {
+  $('srvList').innerHTML = draft.length ? draft.map((s, i) => `<li class="${i === ss.s ? 'sel' : ''}" data-si="${i}" tabindex="0">${icon('server', 14)}<span class="grow">${esc(s.name || 'Unnamed')}</span></li>`).join('')
+    : `<li style="cursor:default;color:var(--muted)">No servers</li>`;
+  $('srvList').onclick = e => { const li = e.target.closest('li[data-si]'); if (!li) return; ss.s = +li.dataset.si; ss.f = null; renderServersPage(); };
+  $('srvList').onkeydown = e => { if (e.key === 'Enter') e.target.click(); };
+}
+
+function renderSrvMain() {
+  const m = $('srvMain');
+  if (ss.s < 0 || !draft[ss.s]) { m.innerHTML = `<div class="empty">No servers yet. Click <b>Add</b> to create the first one.</div>`; return; }
+  const s = draft[ss.s];
+  m.innerHTML = `
+    <div class="section">
+      <div class="col-head">Server</div>
+      <div class="fields">
+        <div class="field"><label for="cfg-name">Name</label><input type="text" id="cfg-name" data-k="name" value="${esc(s.name)}"></div>
+        <div class="field"><label for="cfg-host">Host or IP address</label><input type="text" class="mono" id="cfg-host" data-k="host" value="${esc(s.host)}" placeholder="192.168.1.10"></div>
+        <div class="field"><label for="cfg-mac">MAC address (for Wake-on-LAN)</label><input type="text" class="mono" id="cfg-mac" data-k="mac" value="${esc(s.mac)}" placeholder="aa:bb:cc:dd:ee:ff"></div>
+        <div class="field"><label for="cfg-user">SSH user</label><input type="text" class="mono" id="cfg-user" data-k="user" value="${esc(s.user)}" placeholder="admin"></div>
+        <div class="field full"><label for="cfg-ts">Tailscale address (optional)</label><input type="text" class="mono" id="cfg-ts" data-k="tailscaleHost" value="${esc(s.tailscaleHost)}" placeholder="nas.your-tailnet.ts.net or 100.x.y.z">
+          <div class="preview">Used instead of the host while Tailscale is active. Leave empty if this server isn't in your tailnet.</div></div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-head"><div class="col-head" style="margin:0">Functions</div>
+        <select id="tplSel" aria-label="Add function from template" style="padding:5px 8px;border:1px solid var(--line);border-radius:4px;background:var(--surface)">
+          <option value="">Add function…</option>
+          <option value="status">Status (ping)</option><option value="wake">Wake-on-LAN</option>
+          <option value="poweroff">Power off</option><option value="reboot">Reboot</option>
+          <option value="flag">Flag toggle</option><option value="custom">Custom command</option>
+        </select></div>
+      <ul class="pick" id="fnList"></ul>
+      <div id="fnEditor"></div>
+    </div>`;
+  m.querySelectorAll('input[data-k]').forEach(inp => inp.oninput = () => {
+    s[inp.dataset.k] = inp.value;
+    if (inp.dataset.k === 'name') renderSrvList();
+    updatePreviews();
+  });
+  $('tplSel').onchange = e => {
+    const t = e.target.value; if (!t) return;
+    s.functions.push(t === 'flag' ? mk('flag', 'New flag', '/path/to/flag') : mk(t));
+    ss.f = s.functions.length - 1; renderFnList(); renderFnEditor(); e.target.value = '';
+    $('fe-name')?.focus();
+  };
+  renderFnList(); renderFnEditor();
+}
+
+const TYPE_LABEL = { status:'Status', action:'Action', toggle:'Toggle' };
+function renderFnList() {
+  const s = draft[ss.s];
+  $('fnList').innerHTML = s.functions.length ? s.functions.map((f, i) => `
+    <li class="${i === ss.f ? 'sel' : ''}" data-fi="${i}" tabindex="0">${icon(f.icon, 14)}<span class="grow">${esc(f.name || 'Unnamed')}</span>
+      <span class="chip">${TYPE_LABEL[f.type] || f.type}</span>${f.confirm ? '<span class="chip care">Confirm</span>' : ''}
+      <button class="mini" data-mv="-1" title="Move up" aria-label="Move up">${icon('up', 13)}</button>
+      <button class="mini" data-mv="1" title="Move down" aria-label="Move down">${icon('down', 13)}</button>
+      <button class="mini" data-del title="Remove" aria-label="Remove">${icon('trash', 13)}</button></li>`).join('')
+    : `<li style="cursor:default;color:var(--muted)">No functions. Add one from the menu above.</li>`;
+  $('fnList').onclick = e => {
+    const li = e.target.closest('li[data-fi]'); if (!li) return;
+    const i = +li.dataset.fi, b = e.target.closest('button');
+    if (b?.dataset.mv) {
+      const j = i + +b.dataset.mv; if (j < 0 || j >= s.functions.length) return;
+      [s.functions[i], s.functions[j]] = [s.functions[j], s.functions[i]];
+      if (ss.f === i) ss.f = j; else if (ss.f === j) ss.f = i;
+    } else if (b && 'del' in b.dataset) {
+      s.functions.splice(i, 1); if (ss.f === i) ss.f = null; else if (ss.f > i) ss.f--;
+    } else ss.f = i === ss.f ? null : i;
+    renderFnList(); renderFnEditor();
+  };
+  $('fnList').onkeydown = e => { if (e.key === 'Enter' && e.target.matches('li')) e.target.click(); };
+}
+
+function cmdField(key, label, full = true) {
+  return `<div class="field ${full ? 'full' : ''}"><label for="fe-${key}">${label}</label>
+    <input type="text" class="mono" id="fe-${key}" data-fk="${key}" spellcheck="false"><div class="preview" data-pv="${key}"></div></div>`;
+}
+function renderFnEditor() {
+  const ed = $('fnEditor'), s = draft[ss.s], f = s.functions[ss.f];
+  if (!f) { ed.innerHTML = s.functions.length ? `<p class="note" style="margin:0">Select a function to edit it.</p>` : ''; return; }
+  const when = `<div class="field"><label for="fe-availableWhen">Available when</label><select id="fe-availableWhen" data-fk="availableWhen">
+      <option value="online">Server is online</option><option value="offline">Server is offline</option><option value="always">Always</option></select></div>`;
+  const common = `<div class="field"><label for="fe-timeout">Timeout (seconds)</label><input type="number" min="1" id="fe-timeout" data-fk="timeout"></div>
+      <label class="inline-check field full"><input type="checkbox" id="fe-confirm" data-fk="confirm"> Ask "Are you sure?" before running</label>`;
+  let body = '';
+  if (f.type === 'status') body = cmdField('command', 'Check command (exit code 0 = online)') +
+    `<div class="field"><label for="fe-interval">Check every (seconds)</label><input type="number" min="5" id="fe-interval" data-fk="interval"></div>`;
+  if (f.type === 'action') body = cmdField('command', 'Command') + cmdField('verifyCommand', 'Verify command (optional; otherwise the command\'s exit code decides)') + when + common;
+  if (f.type === 'toggle') body = cmdField('stateCommand', 'State command (exit code 0 = on)') + cmdField('onCommand', 'Turn on') + cmdField('offCommand', 'Turn off') + when + common;
+  ed.innerHTML = `<div class="editor"><div class="fields">
+      <div class="field"><label for="fe-name">Name</label><input type="text" id="fe-name" data-fk="name"></div>
+      <div class="field"><label for="fe-type">Type</label><select id="fe-type" data-fk="type">
+        <option value="status">Status: shows online/offline</option><option value="action">Action: a button</option><option value="toggle">Toggle: an on/off switch</option></select></div>
+      <div class="field"><label for="fe-icon">Icon</label><select id="fe-icon" data-fk="icon">${ICON_CHOICES.map(n => `<option value="${n}">${n}</option>`).join('')}</select></div>
+      <div class="field"></div>
+      ${body}
+      <p class="note field full" style="margin:0">Placeholders: <code>{host}</code> <code>{mac}</code> <code>{user}</code> <code>{name}</code> <code>{ssh}</code> <code>{lanhost}</code> <code>{tshost}</code>. While Tailscale is active, <code>{host}</code> uses the Tailscale address. The grey lines under each command show what will actually run.</p>
+    </div></div>`;
+  ed.querySelectorAll('[data-fk]').forEach(el => {
+    const k = el.dataset.fk;
+    if (el.type === 'checkbox') el.checked = !!f[k]; else el.value = f[k] ?? '';
+    el.addEventListener(el.tagName === 'SELECT' || el.type === 'checkbox' ? 'change' : 'input', () => {
+      if (k === 'type') { changeType(f, el.value); renderFnList(); renderFnEditor(); return; }
+      f[k] = el.type === 'checkbox' ? el.checked : el.type === 'number' ? Number(el.value) : el.value;
+      if (k === 'name' || k === 'icon' || k === 'confirm') renderFnList();
+      updatePreviews();
+    });
+  });
+  updatePreviews();
+}
+function changeType(f, type) {
+  const keep = { id:f.id, name:f.name, icon:f.icon };
+  const base = type === 'status' ? TPL.status() : type === 'toggle' ? TPL.flag() : TPL.custom();
+  for (const k of Object.keys(f)) delete f[k];
+  Object.assign(f, base, keep, { type });
+}
+function updatePreviews() {
+  if (ss.s < 0 || !draft[ss.s]) return;
+  const s = draft[ss.s], f = s.functions[ss.f]; if (!f) return;
+  document.querySelectorAll('[data-pv]').forEach(pv => {
+    const cmd = f[pv.dataset.pv], bad = unknownPh(cmd);
+    pv.classList.toggle('warn', bad.length > 0);
+    pv.textContent = !cmd ? '' : bad.length ? `Unknown placeholder: ${bad.map(b => `{${b}}`).join(', ')}`
+      : usesMac({ command:cmd }) ? expand(cmd, s, dGeneral) + '\n(disabled while Tailscale is active)'
+      : expand(cmd, s, dGeneral) + (s.tailscaleHost && /\{(host|ssh)\}/.test(cmd) ? '\nvia Tailscale: ' + expand(cmd, s, dGeneral, true) : '');
+  });
+}
+
+function renderGeneralPage() {
+  $('cbody').innerHTML = `
+    <div class="section">
+      <div class="col-head">Defaults</div>
+      <div class="fields">
+        <div class="field"><label for="gen-interval">Default status check interval (seconds)</label><input type="number" min="5" id="gen-interval" value="${esc(dGeneral.interval)}"></div>
+        <div class="field full"><label for="gen-ssh">SSH options used by {ssh}</label><input type="text" class="mono" id="gen-ssh" value="${esc(dGeneral.sshOptions)}" spellcheck="false">
+          <div class="preview" id="gen-pv"></div></div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-head"><div class="col-head" style="margin:0">Tailscale</div><span class="chip">Planned for later</span></div>
+      <div class="fields">
+        <div class="field full"><label for="gen-ts">Detection command (exit code 0 = Tailscale is active)</label><input type="text" class="mono" id="gen-ts" value="${esc(dGeneral.tsDetect)}" spellcheck="false"></div>
+      </div>
+      <p class="note" style="margin:0">While Tailscale is active, servers with a Tailscale address are reached through it, servers without one show as not reachable, and Wake-on-LAN is disabled.</p>
+    </div>
+    <div class="section">
+      <div class="section-head"><div class="col-head" style="margin:0">Import / export</div>
+        <button class="btn" id="jsonBtn">${icon('list', 14)}${ss.json ? 'Hide JSON' : 'Show JSON'}</button></div>
+      <p class="note" style="margin:0">The whole setup as JSON: all servers, their functions and the settings on this page. Use it as a backup or to copy the setup to another computer.</p>
+      <div id="jsonPanel" ${ss.json ? '' : 'hidden'}>
+        <textarea id="cfg-json" spellcheck="false" aria-label="Whole setup as JSON">${esc(JSON.stringify({ version:1, general:dGeneral, servers:draft }, null, 2))}</textarea>
+        <div class="row-btns" style="margin-top:8px;align-items:center">
+          <button class="btn" id="jsonCopy">Copy</button>
+          <button class="btn" id="jsonApply">Load this JSON</button>
+          <span class="err-line" id="jsonErr"></span>
+        </div>
+      </div>
+    </div>
+    <div class="section later">
+      <div class="section-head"><div class="col-head" style="margin:0">Panel</div><span class="chip">Planned for later</span></div>
+      <label class="inline-check"><input type="radio" name="pm" checked disabled> One icon for all servers</label>
+      <label class="inline-check"><input type="radio" name="pm" disabled> One dot per server</label>
+      <label class="inline-check"><input type="checkbox" disabled> Show only selected servers in this widget</label>
+    </div>
+    <div class="section later">
+      <div class="section-head"><div class="col-head" style="margin:0">Notifications</div><span class="chip">Planned for later</span></div>
+      <label class="inline-check"><input type="checkbox" disabled> Show a Plasma notification when a function finishes</label>
+      <label class="inline-check"><input type="checkbox" disabled> Notify when a server goes online or offline</label>
+    </div>`;
+  const pv = () => { $('gen-pv').textContent = `{ssh} becomes: ssh ${dGeneral.sshOptions} <user>@<host>`; };
+  $('gen-interval').oninput = e => { dGeneral.interval = Number(e.target.value); };
+  $('gen-ssh').oninput = e => { dGeneral.sshOptions = e.target.value; pv(); };
+  $('gen-ts').oninput = e => { dGeneral.tsDetect = e.target.value; };
+  pv();
+  $('jsonBtn').onclick = () => { ss.json = !ss.json; renderGeneralPage(); };
+  if (!ss.json) return;
+  $('jsonCopy').onclick = async () => {
+    const ta = $('cfg-json');
+    try { await navigator.clipboard.writeText(ta.value); $('jsonCopy').textContent = 'Copied'; }
+    catch { ta.select(); $('jsonCopy').textContent = 'Selected, press Ctrl+C'; }
+  };
+  $('jsonApply').onclick = () => {
+    try {
+      let v = JSON.parse($('cfg-json').value);
+      if (Array.isArray(v)) v = { servers:v };
+      if (!v || !Array.isArray(v.servers)) throw new Error('The JSON needs a "servers" list.');
+      v.servers.forEach((s, i) => {
+        if (!s || typeof s.name !== 'string' || !Array.isArray(s.functions)) throw new Error(`Server ${i + 1} needs a "name" and a "functions" list.`);
+        s.id = s.id || nid('s'); s.functions.forEach(f => { f.id = f.id || nid('f'); });
+      });
+      draft = v.servers;
+      if (v.general) dGeneral = Object.assign(clone(general), v.general);
+      ss.s = draft.length ? 0 : -1; ss.f = null;
+      renderGeneralPage();
+      $('jsonErr').style.color = 'var(--ok)';
+      $('jsonErr').textContent = `Loaded ${draft.length} server(s). Click OK or Apply to use them.`;
+    } catch (err) { $('jsonErr').textContent = err.message; }
+  };
+}
+
+$('cnav').addEventListener('click', e => { const b = e.target.closest('button[data-page]'); if (!b) return; ss.page = b.dataset.page; renderSettings(); });
+$('winClose').innerHTML = icon('x', 16);
+$('winClose').onclick = closeSettings;
+$('cfgCancel').onclick = closeSettings;
+$('cfgApply').onclick = applySettings;
+$('cfgOk').onclick = () => { applySettings(); closeSettings(); };
+$('settings').addEventListener('click', e => { if (e.target === $('settings')) closeSettings(); });
+
+$('btnRefresh').innerHTML = icon('refresh', 16);
+$('btnConfig').innerHTML = icon('settings', 16);
+$('launcher').innerHTML = icon('menu', 20);
+$('trayVol').innerHTML = icon('vol', 18);
+$('trayNet').innerHTML = icon('net', 18);
+
+initState();
+openPopup();
+</script>
+
+</body></html>
