@@ -219,6 +219,7 @@ tools/
 
 ```sh
 plasmoidviewer -a package/                                 # quick preview (needs plasma-sdk)
+plasmoidviewer -a package/ -l bottomedge -f horizontal     # preview as panel
 kpackagetool6 -t Plasma/Applet -i package/                 # install
 kpackagetool6 -t Plasma/Applet -u package/                 # update after changes
 systemctl --user restart plasma-plasmashell                # reload the panel if needed
