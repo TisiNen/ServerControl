@@ -318,3 +318,35 @@ Work in phases. Each phase should be usable and testable on its own.
 - All user-visible strings go through `i18n()` / `i18nc()`.
 - Never block the UI. Every command is asynchronous and has a timeout.
 - Commands run with the user's privileges, exactly as configured. Don't add hidden commands.
+- Never commit by yourself. The user commits.
+
+## Documentation
+
+Docs are part of the change. Update them in the same step as the code that affects them.
+Never leave a doc describing behaviour that no longer exists.
+
+| Doc                                 | Audience               | Update when …                                                                                                               |
+| ----------------------------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `CLAUDE.md`                         | Claude, developer      | The data model, function types, placeholders, templates, conventions or package layout change; a roadmap phase is finished |
+| `docs/QML through this codebase.md` | The user, learning QML | Any file in `package/contents/ui/` is added, removed, renamed or changes in a way that affects a quoted excerpt             |
+
+### Rules
+
+- **CLAUDE.md is the spec.** If the implementation deliberately differs from it, update CLAUDE.md
+  and mention the change in your report. Don't silently drift from it.
+- **Code excerpts must match the code.** After editing a file, grep `docs/` for its name and check
+  every excerpt and explanation that refers to it.
+- **QML guide specifics:**
+  - Keep the file table (files, line counts, descriptions) and the "as it stands after phase N"
+    line up to date.
+  - If the code uses a QML concept the guide doesn't cover yet (e.g. `Repeater`, `Loader`,
+    `Connections`, Kirigami dialogs, `KCM.SimpleKCM`), add a short entry to Part 1 using
+    the real code as the example.
+  - Edit only the affected sections; don't rewrite the guide.
+  - Keep its style: short sentences, real excerpts from this repo, no generic examples.
+- **Roadmap:** when a phase is done, mark it done in CLAUDE.md.
+
+### Reporting
+
+End every task that changes code with a "Docs" line: either which docs you updated, or
+"no doc changes needed" and why.
