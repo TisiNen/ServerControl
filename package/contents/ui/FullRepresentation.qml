@@ -45,9 +45,24 @@ PlasmaExtras.Representation {
         ListView {
             id: list
 
-            model: full.plasmoidItem.servers
+            model: full.plasmoidItem.serverList
             spacing: Kirigami.Units.smallSpacing
             clip: true
+
+            // Shown only when parsing the config skipped or fixed something;
+            // the details go to the log (see main.qml).
+            header: full.plasmoidItem.configWarnings.length > 0 ? configWarning : null
+
+            Component {
+                id: configWarning
+
+                Kirigami.InlineMessage {
+                    width: list.width
+                    visible: true
+                    type: Kirigami.MessageType.Warning
+                    text: i18n("Some server settings are invalid and were ignored. See the system log for details.")
+                }
+            }
 
             delegate: ServerDelegate {
                 width: ListView.view.width

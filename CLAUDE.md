@@ -43,6 +43,18 @@ Plasma's config (KConfigXT) only stores simple types, so the whole server list i
 **one JSON string** in the config key `servers`. Parse it once, validate it, and fall back
 to `[]` on error. Never crash on bad config.
 
+Parsing and validation live in `code/model.js` (`parseServers()`), with these rules:
+
+- Not JSON, or not a list: no servers, one warning.
+- An entry that isn't an object, or a function with an unknown `type`, is skipped with a warning.
+- A missing or duplicate `id` (servers globally, functions per server) is replaced by a
+  position-based id (`server-2`, `<serverId>-fn-1`), so ids stay stable across re-parses.
+- Missing or invalid fields get defaults: `timeout` 10, `interval` 30, `availableWhen` `always`,
+  `confirm` false, commands `""`, an icon per type. A server without a name shows its host.
+  Numbers must be positive; numeric strings are accepted.
+- Warnings are English developer messages, logged with `console.warn`. The popup only shows that
+  there were some.
+
 Servers also have an optional `tailscaleHost` field (Tailscale IP or MagicDNS name). It is
 reserved for the later Tailscale feature (see Roadmap phase 4). Until then, validation must keep
 it and other unknown fields instead of dropping them.
@@ -268,8 +280,12 @@ Rules:
 - The load test proves only that the widget starts without errors. Don't claim that a feature
   works because the load test passed.
 - If you need a test config in the sandbox, use only harmless commands (`true`, `false`,
-  `sleep 3`, `echo`). Where `plasmoidviewer` stores applet config has to be found out in
-  phase 0.
+  `sleep 3`, `echo`). Pass it with `tools/sandbox/load-test.sh -v --servers FILE`.
+  `plasmoidviewer` discards a preset applet config (`~/.config/plasmoidviewer-appletsrc`), so the
+  script copies the package and makes the file the default of the `servers` key in `main.xml`.
+  Invalid JSON is passed through as is, to test the fallback.
+- `console.log` output is filtered in the sandbox; use `console.warn` for temporary debug output,
+  and remove it afterwards.
 - Don't install into the user's live panel or restart `plasmashell` without asking, because
   that affects the running desktop.
 
@@ -290,8 +306,9 @@ Work in phases. Each phase should be usable and testable on its own.
    the test fail.
 1. **Skeleton**: package layout, metadata, compact and full representations, `CommandRunner`
    with timeout. One server hardcoded in JS, with ping status shown as a dot.
-2. **Generic model**: JSON config model, all three function types, placeholders, confirmation
-   dialog, inline feedback, faster polling after wake/poweroff.
+2. **Generic model** (in progress; JSON config model done): JSON config model, all three
+   function types, placeholders, confirmation dialog, inline feedback, faster polling after
+   wake/poweroff.
 3. **Settings UI**: server and function editor, templates, JSON import/export.
 4. **Later options**:
    - Panel mode: one icon for all servers vs. one dot per server in the compact view, plus a

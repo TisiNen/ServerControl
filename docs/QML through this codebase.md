@@ -4,24 +4,25 @@ Nov 4, 2026 · @Tilo
 
 ## How to read this guide
 
-This guide teaches QML using only the Server Control widget as it stands after phase 1: 7 source files, about 440 lines. Read Part 1 first, then follow one status check through the code in Part 3; the per-file notes in Part 4 are for looking things up.
+This guide teaches QML using only the Server Control widget as it stands partway through phase 2 (the JSON config model is in, the other function types are not yet): 8 source files, about 660 lines. Read Part 1 first, then follow one status check through the code in Part 3; the per-file notes in Part 4 are for looking things up.
 
 | File | Lines | Language | What it is |
 | --- | --- | --- | --- |
 | `package/metadata.json` | 18 | JSON | Tells Plasma this folder is a widget: name, icon, plugin ID |
-| `package/contents/ui/main.qml` | 117 | QML | The root of the widget: state, timer, status checks |
+| `package/contents/config/main.xml` | 15 | XML | The config schema: one `servers` key holding JSON |
+| `package/contents/ui/main.qml` | 166 | QML | The root of the widget: config, state, timer, status checks |
 | `package/contents/ui/CommandRunner.qml` | 52 | QML | Runs shell commands in the background and calls you back |
 | `package/contents/ui/CompactRepresentation.qml` | 50 | QML | The panel icon with its coloured dot |
-| `package/contents/ui/FullRepresentation.qml` | 66 | QML | The popup: heading, refresh button, server list |
+| `package/contents/ui/FullRepresentation.qml` | 81 | QML | The popup: heading, refresh button, config warning, server list |
 | `package/contents/ui/ServerDelegate.qml` | 63 | QML | One row in the popup list, one per server |
-| `package/contents/ui/code/model.js` | 38 | JavaScript | The hardcoded demo server and a lookup helper |
+| `package/contents/ui/code/model.js` | 185 | JavaScript | Parses and validates the `servers` config JSON |
 | `package/contents/ui/code/commands.js` | 52 | JavaScript | Placeholder substitution, shell quoting, timeout wrapping |
 
 If you know JavaScript, you already know half of QML: everything inside `function`, `{ … }` property expressions and `on…` handlers is ordinary JavaScript. The new part is the declarative layer around it, which Part 1 covers.
 
 ## Part 1: QML basics
 
-A QML file describes a tree of objects and how their properties depend on each other; the engine keeps those dependencies up to date for you. The twelve ideas below explain almost every line in this repo.
+A QML file describes a tree of objects and how their properties depend on each other; the engine keeps those dependencies up to date for you. The fourteen ideas below explain almost every line in this repo.
 
 ### 1. A file is a tree of objects
 
@@ -70,7 +71,7 @@ readonly property bool busy: actionsRunning > 0
 
 Nobody ever writes `busy = true`. When `actionsRunning` changes, `busy` updates, then everything that reads `busy` updates, such as the spinner's `running: compact.plasmoidItem.busy`. A chain of bindings carries a change from the data to the screen.
 
-A binding can be a whole block of JS, as long as it returns a value. `onlineCount` in `main.qml` is one: it loops over `servers` and `serverStates`, so it recalculates when either changes.
+A binding can be a whole block of JS, as long as it returns a value. `onlineCount` in `main.qml` is one: it loops over `serverList` and `serverStates`, so it recalculates when either changes.
 
 **Binding vs. assignment.** `color: x ? a : b` in the object declaration is a binding and stays live. `color = a` inside a function is an assignment: it sets the value once and removes any binding the property had.
 
@@ -131,8 +132,8 @@ To show a list, you give a view a **model** (the data) and a **delegate** (a tem
 
 ```qml
 ListView {
-    model: full.plasmoidItem.servers     // a JS array of server objects
-    delegate: ServerDelegate { … }        // one row per server
+    model: full.plasmoidItem.serverList  // a JS array of server objects
+    delegate: ServerDelegate { … }     // one row per server
 }
 ```
 
@@ -155,6 +156,36 @@ A property written `TypeName.property` belongs to another type but is set on thi
 
 `.pragma library` at the top of a JS file means it is loaded once and shared by every QML file that imports it. Such a file has no access to QML objects, only to what you pass into its functions. That keeps `model.js` and `commands.js` as pure helpers.
 
+### 13. Reacting to another object's signals: Connections, Component.onCompleted
+
+A handler like `onExpandedChanged` only works on the object it is written in. To react to a signal of *another* object, use `Connections`: set `target` to that object and write the handler as a function named `on<Signal>`. `main.qml` uses it to notice config changes:
+
+```qml
+Connections {
+    target: Plasmoid.configuration
+
+    function onServersChanged() {
+        root.applyConfig();
+    }
+}
+```
+
+`Component.onCompleted` is an attached signal \[11\] every object has. It runs once, after the object and all its properties are set up: `Component.onCompleted: applyConfig()` in `main.qml` reads the config at startup, because `serversChanged` doesn't fire for the initial value.
+
+### 14. Components declared inline
+
+`Component { id: … ; SomeType { … } }` inside a file declares a template without creating anything \[8\]. It can be handed to a property that expects a component, and QML creates the object only when needed. `FullRepresentation.qml` uses this for the list's `header`, so the warning exists only when there is something to warn about:
+
+```qml
+header: full.plasmoidItem.configWarnings.length > 0 ? configWarning : null
+
+Component {
+    id: configWarning
+
+    Kirigami.InlineMessage { … }
+}
+```
+
 ## Part 2: The Plasma-specific parts
 
 Plasma adds a root type for widgets, two ways to show them, and a way to run shell commands; everything else is standard QML.
@@ -172,7 +203,7 @@ Properties the repo uses:
 | `expanded` | read and set | `true` while the popup is open |
 | `toolTipMainText`, `toolTipSubText` | `main.qml` sets | The tooltip on the panel icon |
 
-There is also an attached object `Plasmoid` (capital P) that gives access to the applet itself: `Plasmoid.icon` (from `metadata.json`) and, from phase 2 on, `Plasmoid.configuration.servers` for the saved settings.
+There is also an attached object `Plasmoid` (capital P) that gives access to the applet itself: `Plasmoid.icon` (from `metadata.json`) and `Plasmoid.configuration.servers` for the saved settings (see "Configuration" below).
 
 ### Compact and full representation
 
@@ -210,6 +241,18 @@ QML has no built-in way to run a program. Plasma offers the old "data engine" sy
 
 Two quirks shape `CommandRunner.qml`. Two identical command strings would be one source, so the second wouldn't run; a `  # 7 ` comment makes each one unique. And the engine has no timeout, so every command is wrapped in `timeout`.
 
+### Configuration: main.xml and Plasmoid.configuration
+
+`contents/config/main.xml` declares the widget's settings (KConfigXT). Each `<entry>` becomes a property of `Plasmoid.configuration`, with a matching `…Changed` signal. Plasma saves the values per widget instance in `~/.config/plasma-org.kde.plasma.desktop-appletsrc`.
+
+```xml
+<entry name="servers" type="String">
+  <default>[]</default>
+</entry>
+```
+
+KConfigXT only stores simple types, so the whole server list is one JSON string. `model.js` turns it into objects; `main.qml` calls it whenever the string changes. The settings pages that write this key come in phase 3.
+
 ### metadata.json
 
 The file Plasma reads to find the widget at all. `KPackageStructure: "Plasma/Applet"` says it's a widget, `Id` must be unique and matches the install folder, and `Icon` becomes `Plasmoid.icon`. Plasma looks for `contents/ui/main.qml` by convention.
@@ -222,18 +265,18 @@ A timer starts the ping, `CommandRunner` runs it in the background, and one assi
 
 The top two rows are code that runs; the bottom row updates by itself because each part binds to `serverStates`.
 
-1. **The widget starts.** Plasma creates the `PlasmoidItem` in `main.qml`. Its `servers` property is evaluated once: `Model.defaultServers()` returns an array with the demo server "NAS" at `192.168.1.10`. `serverStates` starts as `{}`, so every server counts as "not checked yet".
-2. **The timer fires.** `Timer` has `triggeredOnStart: true`, so `onTriggered` runs right away, then every 1000 ms (`main.qml:103-116`). For each server it compares `Date.now()` with `_nextCheck[s.id]`. Nothing is stored yet, so `|| 0` makes the check due and it calls `checkStatus(s)`.
-3. **checkStatus prepares the command** (`main.qml:60-71`).
+1. **The widget starts.** Plasma creates the `PlasmoidItem` in `main.qml`. `Component.onCompleted` (`main.qml:122`) calls `applyConfig()` (`main.qml:96-120`), which reads `Plasmoid.configuration.servers` and passes it to `Model.parseServers()`. Say the config holds one server "NAS" at `192.168.1.10` with id `nas` and a ping status function; then `servers` becomes an array with that one server. `serverStates` starts as `{}`, so every server counts as "not checked yet".
+2. **The timer fires.** `Timer` has `triggeredOnStart: true`, so `onTriggered` runs right away, then every 1000 ms (`main.qml:152-165`). For each server it compares `Date.now()` with `_nextCheck[s.id]`. Nothing is stored yet, so `|| 0` makes the check due and it calls `checkStatus(s)`.
+3. **checkStatus prepares the command** (`main.qml:69-84`).
    1. `Model.statusFunction(server)` finds the server's first function with `type: "status"`.
    2. If a check for this server is already running (`_checking[server.id]`), it stops here. This prevents two pings piling up when a host is slow.
-   3. It marks the check as running and schedules the next one: now + 30 s.
+   3. It remembers the current `_configGeneration`, marks the check as running and schedules the next one: now + `interval` (30 s).
    4. `Commands.substitute("ping -c 1 -W 1 {host}", server)` turns the template into `ping -c 1 -W 1 192.168.1.10`.
    5. It calls `runner.run(command, 10, callback)`. The callback is an arrow function that will run later.
 4. **CommandRunner starts it** (`CommandRunner.qml:21-29`). `Commands.withTimeout` wraps the command as `timeout -k 2 10 sh -c 'ping -c 1 -W 1 192.168.1.10'`, and `  # 1 ` is appended to make the source name unique. The callback is stored under that exact string in `_callbacks`, and `connectSource(source)` hands the command to Plasma.
 5. **Nothing blocks.** `run()` returns immediately and the UI keeps responding. Plasma runs the shell command in a separate process.
 6. **The result arrives** (`CommandRunner.qml:31-51`). Plasma emits `newData(sourceName, data)`. The handler looks up the callback by `sourceName`, removes it, disconnects the source and checks whether the exit code is a timeout (124 or 137). Then it calls the callback with `{ exitCode: 0, stdout, stderr, timedOut: false }`.
-7. **The state changes** (`main.qml:67-70`). The callback clears `_checking` and calls `setState("demo-server", "online")`. `setState` copies `serverStates`, sets the entry and assigns the copy back.
+7. **The state changes** (`main.qml:77-83`). If the config changed while the ping ran, the generation no longer matches and the result is dropped. Otherwise the callback clears `_checking` and calls `setState("nas", "online")`. `setState` copies `serverStates`, sets the entry and assigns the copy back.
 8. **Bindings take over.** That single assignment is the only thing the code "does"; everything below happens because properties read `serverStates`:
    - `onlineCount` recalculates to 1, so `overallState` becomes `"all"`.
    - In the panel, `dotColor` becomes `Kirigami.Theme.positiveTextColor`, so the dot `Rectangle` turns green (`CompactRepresentation.qml:15-17, 39`).
@@ -254,19 +297,21 @@ Each note covers what the file is for and the lines that are hard to read the fi
 The root of the widget and the only place that holds state. Everything else reads from it.
 
 - **Lines 4-5:** imports the two JS helpers as `Model` and `Commands` \[12\].
-- **Line 10, `servers`:** `readonly` and bound to a function call with no inputs, so it is evaluated once. In phase 2 this will read `Plasmoid.configuration.servers` instead, and become a live binding.
-- **Line 13, `serverStates`:** the central state, a map from server id to `"online"`/`"offline"`. Always replaced, never mutated \[4\].
-- **Lines 17-18, `actionsRunning` and `busy`:** nothing changes `actionsRunning` yet; it is ready for phase 2, when Wake and Power off will count up and down. Status checks deliberately don't count, or the spinner would flash every 30 s.
-- **Lines 20-31, `onlineCount` and `overallState`:** two derived bindings \[4\]. `overallState` uses chained `? :` to pick `"all"`, `"some"` or `"none"`; the `servers.length > 0` guard stops an empty list from counting as "all online".
-- **Lines 34-35, `_nextCheck` and `_checking`:** bookkeeping. Mutated in place because no binding reads them.
-- **Lines 37-49, `stateText()`:** turns a state into a translated label. `i18n()` is Plasma's translation function; every user-visible string goes through it.
-- **Lines 51-58, `setState()`:** returns early if nothing changed, so bindings don't re-run for nothing. Then the copy-and-assign pattern.
-- **Lines 60-77, `checkStatus()` and `refreshAll()`:** see Part 3, step 3.
-- **Lines 79-81, tooltip:** `i18nc("context", "%1: %2", a, b)` is `i18n` with a hint for translators; `%1` and `%2` are filled from the arguments.
-- **Lines 83-87, `onExpandedChanged`:** a property-change handler \[6\] that refreshes when the popup opens.
-- **Lines 89-95:** the two representations, each handed a reference to `root` (Part 2).
-- **Lines 97-99:** one `CommandRunner` instance, named `runner` \[8\]. It isn't visual; a `PlasmoidItem` can hold non-visual children.
-- **Lines 103-116, `Timer`:** one timer ticking every second, instead of one timer per server. Each server's next check time is stored in `_nextCheck`, so servers can have different intervals and phase 2 can speed one up after Wake. Inside the handler, the code writes `root.servers` and `root.checkStatus` with the id: inside a child object, being explicit avoids confusion with the Timer's own properties.
+- **Lines 10-15, `parsedConfig`, `serverList`, `configWarnings`:** `parsedConfig` holds the result of `Model.parseServers()`: `{ servers, warnings }`. It is assigned in `applyConfig()`, not bound to the config: Plasma re-evaluated such a binding at startup even though the config hadn't changed, which reset all state and logged every warning twice. `serverList` and `configWarnings` are plain bindings on top of it \[4\]. The name differs from the config key `servers` on purpose: one is the parsed list, the other the raw JSON string.
+- **Line 18, `serverStates`:** the central state, a map from server id to `"online"`/`"offline"`. Always replaced, never mutated \[4\].
+- **Lines 22-23, `actionsRunning` and `busy`:** nothing changes `actionsRunning` yet; it is ready for the rest of phase 2, when Wake and Power off will count up and down. Status checks deliberately don't count, or the spinner would flash every 30 s.
+- **Lines 25-36, `onlineCount` and `overallState`:** two derived bindings \[4\]. `overallState` uses chained `? :` to pick `"all"`, `"some"` or `"none"`; the `serverList.length > 0` guard stops an empty list from counting as "all online".
+- **Lines 39-44, bookkeeping:** `_nextCheck` and `_checking` are mutated in place because no binding reads them. `_configGeneration` counts config changes, so a ping started with the old config can't overwrite the state after a change. `_appliedConfig` is the last config string parsed.
+- **Lines 46-58, `stateText()`:** turns a state into a translated label. `i18n()` is Plasma's translation function; every user-visible string goes through it.
+- **Lines 60-67, `setState()`:** returns early if nothing changed, so bindings don't re-run for nothing. Then the copy-and-assign pattern.
+- **Lines 69-90, `checkStatus()` and `refreshAll()`:** see Part 3, step 3. `fn.interval` and `fn.timeout` are used as they are, because `parseServers()` guarantees they are positive numbers.
+- **Lines 92-94, tooltip:** `i18nc("context", "%1: %2", a, b)` is `i18n` with a hint for translators; `%1` and `%2` are filled from the arguments.
+- **Lines 96-120, `applyConfig()`:** returns early if the config string is the one already parsed. Otherwise it parses, logs each warning with `console.warn` (visible in `journalctl`), drops the states of removed servers and clears the bookkeeping, so every server is checked again on the next timer tick. A host or status command may have changed.
+- **Lines 122-130:** `Component.onCompleted` and `Connections` \[13\] call `applyConfig()` at startup and on every change of the `servers` key.
+- **Lines 132-136, `onExpandedChanged`:** a property-change handler \[6\] that refreshes when the popup opens.
+- **Lines 138-144:** the two representations, each handed a reference to `root` (Part 2).
+- **Lines 146-148:** one `CommandRunner` instance, named `runner` \[8\]. It isn't visual; a `PlasmoidItem` can hold non-visual children.
+- **Lines 152-165, `Timer`:** one timer ticking every second, instead of one timer per server. Each server's next check time is stored in `_nextCheck`, so servers can have different intervals and a later step of phase 2 can speed one up after Wake. Inside the handler, the code writes `root.serverList` and `root.checkStatus` with the id: inside a child object, being explicit avoids confusion with the Timer's own properties.
 
 ### CommandRunner.qml
 
@@ -298,8 +343,9 @@ The popup.
 - **Lines 13-16, `Layout.*` sizes:** tell Plasma how big the popup may be, in grid units (multiples of the font size).
 - **Line 18, `collapseMarginsHint`:** lets the list run to the popup's edges instead of sitting inside a margin.
 - **Lines 20-42, header:** a `RowLayout` with a heading that takes all spare width (`Layout.fillWidth`) and a refresh button. The button has `text` even though it shows only an icon (`display: IconOnly`); the text is used by screen readers and by its own tooltip (`ToolTip.text: text`). `ToolTip.*` are attached properties \[11\].
-- **Lines 44-65, list:** a `ScrollView` around a `ListView` \[9\]. `width: ListView.view.width` is an attached property that makes each row as wide as the list. `clip: true` stops rows from drawing outside the list while scrolling.
-- **Lines 57-63, `PlaceholderMessage`:** a child of the ListView, centred on it, shown only when `list.count === 0`. Phase 1 always has one server, so you won't see it until phase 2.
+- **Lines 44-80, list:** a `ScrollView` around a `ListView` \[9\]. `width: ListView.view.width` is an attached property that makes each row as wide as the list. `clip: true` stops rows from drawing outside the list while scrolling.
+- **Lines 52-65, config warning:** the list's `header` is an inline `Component` \[14\], set only when `configWarnings` isn't empty. `Kirigami.InlineMessage` is hidden by default, hence `visible: true`. It doesn't list the problems, which are English developer messages; it points to the log.
+- **Lines 72-78, `PlaceholderMessage`:** a child of the ListView, centred on it, shown only when `list.count === 0`, which is the case with the default config `[]`.
 
 ### ServerDelegate.qml
 
@@ -315,9 +361,13 @@ One row of the list, created once per server by the `ListView`.
 
 ### code/model.js
 
-Pure data helpers, no QML \[12\]. In phase 2 this file will parse and validate the JSON config.
+Pure data helpers, no QML \[12\]. Turns the `servers` config string into objects the UI can trust: every field it reads exists and has the right type.
 
-- **`defaultServers()`:** returns the one hardcoded server. To test against a real machine, change `name` and `host` here.
+- **`parseServers(text)`:** the entry point. Never throws; returns `{ servers, warnings }`. Empty text is a valid empty config. Text that isn't JSON, or JSON that isn't a list, gives no servers and one warning. Otherwise each entry goes through `normalizeServer()`, and entries that come back `null` are skipped.
+- **`normalizeServer()` and `normalizeFunction()`:** copy the raw object with `Object.assign({}, raw)` first, so unknown fields like `tailscaleHost` survive, then overwrite the known fields with checked values. A function with an unknown `type` is skipped. Missing fields get defaults: `timeout` 10, `interval` 30, `availableWhen` `"always"`, `confirm` `false`, an icon per type. A server without a name shows its host.
+- **`uniqueId()`:** a missing or duplicate id is replaced by one built from the position, like `server-2` or `nas-fn-1`. Not random, so the same config gives the same ids every time and `serverStates` survives a re-parse.
+- **`asSeconds()`, `asString()`, `oneOf()`:** small type checks with a fallback. `asSeconds("30")` accepts a numeric string; `0`, negatives and `true` fall back.
+- **`serializeServers(servers)`:** `JSON.stringify` for writing the config, used from phase 3 on.
 - **`statusFunction(server)`:** returns the first function whose `type` is `"status"`, or `null`. The `(server && server.functions) || []` guard means a malformed server can't crash it.
 
 ### code/commands.js
@@ -341,7 +391,7 @@ The automatic load test, written in Bash, not QML.
 
 - **`Containerfile`:** a Fedora 44 image with the Plasma 6 packages, `plasmoidviewer`, a virtual X screen (`Xvfb`) and dbus.
 - **`entrypoint.sh`:** runs inside the container. Starts Xvfb, runs `plasmoidviewer` on the mounted package for 15 s, then searches the log for lines that mention `/package/` or applet load errors. Fails if it finds any, or if `plasmoidviewer` quit early.
-- **`load-test.sh`:** runs on your machine. Builds the image if needed and starts the container with `--network none` and the package mounted read-only. `--self-test` swaps in a broken `main.qml` to prove the test catches errors.
+- **`load-test.sh`:** runs on your machine. Builds the image if needed and starts the container with `--network none` and the package mounted read-only. `--self-test` swaps in a broken `main.qml` to prove the test catches errors. `--servers FILE` loads the widget with a test config: `plasmoidviewer` throws away a preset applet config, so the script copies the package and puts the file's content in as the default of the `servers` key in `main.xml`.
 
 ## Glossary and further reading
 
@@ -356,7 +406,7 @@ The automatic load test, written in Bash, not QML.
 | Full representation | The popup (`FullRepresentation.qml`) |
 | Handler | Code that runs on a signal, named `on<Signal>` |
 | id | A name for an object, usable only within its own file |
-| Model | The data a view shows; here the `servers` array |
+| Model | The data a view shows; here the `serverList` array |
 | Plasmoid | A Plasma widget; the package in `package/` |
 | PlasmoidItem | The root type of a Plasma 6 widget (`main.qml`) |
 | Signal | An event an object announces, e.g. `triggered`, `clicked`, `newData` |
