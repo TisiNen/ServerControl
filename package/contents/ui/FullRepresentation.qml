@@ -1,9 +1,12 @@
 import QtQuick
+import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.components as PlasmaComponents3
 import org.kde.plasma.extras as PlasmaExtras
 import org.kde.plasma.plasmoid
+
+import "code/commands.js" as Commands
 
 PlasmaExtras.Representation {
     id: full
@@ -16,6 +19,16 @@ PlasmaExtras.Representation {
     Layout.preferredHeight: Kirigami.Units.gridUnit * 14
 
     collapseMarginsHint: true
+
+    // Runs a function the user clicked, after asking first if it has
+    // `confirm` set.
+    function activate(server, fn, turnOn) {
+        if (fn.confirm) {
+            confirmDialog.ask(server, fn, turnOn);
+        } else {
+            plasmoidItem.runFunction(server, fn, turnOn);
+        }
+    }
 
     header: PlasmaExtras.PlasmoidHeading {
         RowLayout {
@@ -67,6 +80,7 @@ PlasmaExtras.Representation {
             delegate: ServerDelegate {
                 width: ListView.view.width
                 plasmoidItem: full.plasmoidItem
+                onFunctionActivated: (fn, turnOn) => full.activate(modelData, fn, turnOn)
             }
 
             PlasmaExtras.PlaceholderMessage {
@@ -77,5 +91,34 @@ PlasmaExtras.Representation {
                 text: i18n("No servers configured")
             }
         }
+    }
+
+    Kirigami.PromptDialog {
+        id: confirmDialog
+
+        property var server: null
+        property var fn: null
+        property bool turnOn: true
+
+        readonly property string functionName: fn ? full.plasmoidItem.functionName(fn) : ""
+        readonly property string command: !fn ? ""
+            : Commands.substitute(fn.type === "toggle" ? (turnOn ? fn.onCommand : fn.offCommand) : fn.command, server)
+
+        function ask(server, fn, turnOn) {
+            this.server = server;
+            this.fn = fn;
+            this.turnOn = turnOn;
+            open();
+        }
+
+        title: !fn ? ""
+            : fn.type !== "toggle" ? i18nc("@title:window, %1 function, %2 server", "Run “%1” on %2?", functionName, server.name)
+            : turnOn ? i18nc("@title:window, %1 function, %2 server", "Turn on “%1” on %2?", functionName, server.name)
+            : i18nc("@title:window, %1 function, %2 server", "Turn off “%1” on %2?", functionName, server.name)
+        subtitle: i18n("This runs: %1", command)
+        preferredWidth: Math.min(Kirigami.Units.gridUnit * 18, full.width - Kirigami.Units.gridUnit * 2)
+        standardButtons: QQC2.Dialog.Ok | QQC2.Dialog.Cancel
+
+        onAccepted: full.plasmoidItem.runFunction(server, fn, turnOn)
     }
 }

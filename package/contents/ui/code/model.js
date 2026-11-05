@@ -183,3 +183,33 @@ function statusFunction(server) {
     }
     return null;
 }
+
+// The functions shown as controls in the popup: all except the first
+// status function, which is shown as the server's dot.
+function controlFunctions(server) {
+    const primary = statusFunction(server);
+    return ((server && server.functions) || []).filter(fn => fn !== primary);
+}
+
+// Key for per-function state, unique across servers.
+function functionKey(server, fn) {
+    return server.id + "/" + fn.id;
+}
+
+// Why a function can't run right now, or "" if it can.
+// `serverState` is "online", "offline" or "" (not checked yet).
+// Returns "needsOnline", "needsOffline" or "unknown"; the UI translates it.
+// A server without a status function can't be online or offline, so its
+// functions are always available.
+function unavailableReason(fn, server, serverState) {
+    if (fn.type === "status" || fn.availableWhen === "always" || !statusFunction(server)) {
+        return "";
+    }
+    if (serverState !== "online" && serverState !== "offline") {
+        return "unknown";
+    }
+    if (fn.availableWhen !== serverState) {
+        return fn.availableWhen === "online" ? "needsOnline" : "needsOffline";
+    }
+    return "";
+}

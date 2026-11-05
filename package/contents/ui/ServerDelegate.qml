@@ -4,60 +4,98 @@ import org.kde.kirigami as Kirigami
 import org.kde.plasma.components as PlasmaComponents3
 import org.kde.plasma.plasmoid
 
+import "code/model.js" as Model
+
 Item {
-    id: delegate
+    id: serverRow
 
     required property var modelData
     required property PlasmoidItem plasmoidItem
 
+    // Forwarded from a FunctionControl; FullRepresentation decides whether
+    // to confirm first.
+    signal functionActivated(var fn, bool turnOn)
+
     // "online" | "offline" | "" (not checked yet)
     readonly property string serverState: plasmoidItem.serverStates[modelData.id] || ""
+    readonly property real dotSize: Kirigami.Units.gridUnit * 0.6
 
-    implicitHeight: row.implicitHeight + Kirigami.Units.smallSpacing * 2
+    implicitHeight: column.implicitHeight + Kirigami.Units.smallSpacing * 2
 
-    RowLayout {
-        id: row
+    ColumnLayout {
+        id: column
 
         anchors.fill: parent
         anchors.leftMargin: Kirigami.Units.largeSpacing
         anchors.rightMargin: Kirigami.Units.largeSpacing
-        spacing: Kirigami.Units.largeSpacing
+        anchors.topMargin: Kirigami.Units.smallSpacing
+        anchors.bottomMargin: Kirigami.Units.smallSpacing
+        spacing: Kirigami.Units.smallSpacing
 
-        Rectangle {
-            Layout.alignment: Qt.AlignVCenter
-            implicitWidth: Kirigami.Units.gridUnit * 0.6
-            implicitHeight: implicitWidth
-            radius: width / 2
-            color: delegate.serverState === "online" ? Kirigami.Theme.positiveTextColor
-                : delegate.serverState === "offline" ? Kirigami.Theme.disabledTextColor
-                : "transparent"
-            border.width: delegate.serverState === "" ? 1 : 0
-            border.color: Kirigami.Theme.disabledTextColor
-        }
-
-        ColumnLayout {
+        RowLayout {
             Layout.fillWidth: true
-            spacing: 0
+            spacing: Kirigami.Units.largeSpacing
 
-            PlasmaComponents3.Label {
+            Rectangle {
+                Layout.alignment: Qt.AlignVCenter
+                implicitWidth: serverRow.dotSize
+                implicitHeight: implicitWidth
+                radius: width / 2
+                color: serverRow.serverState === "online" ? Kirigami.Theme.positiveTextColor
+                    : serverRow.serverState === "offline" ? Kirigami.Theme.disabledTextColor
+                    : "transparent"
+                border.width: serverRow.serverState === "" ? 1 : 0
+                border.color: Kirigami.Theme.disabledTextColor
+            }
+
+            ColumnLayout {
                 Layout.fillWidth: true
-                text: delegate.modelData.name
-                elide: Text.ElideRight
+                spacing: 0
+
+                PlasmaComponents3.Label {
+                    Layout.fillWidth: true
+                    text: serverRow.modelData.name
+                    elide: Text.ElideRight
+                }
+
+                PlasmaComponents3.Label {
+                    Layout.fillWidth: true
+                    text: serverRow.modelData.host
+                    elide: Text.ElideRight
+                    font: Kirigami.Theme.smallFont
+                    opacity: 0.7
+                }
             }
 
             PlasmaComponents3.Label {
-                Layout.fillWidth: true
-                text: delegate.modelData.host
-                elide: Text.ElideRight
-                font: Kirigami.Theme.smallFont
-                opacity: 0.7
+                text: serverRow.plasmoidItem.stateText(serverRow.modelData)
+                color: serverRow.serverState === "online" ? Kirigami.Theme.positiveTextColor
+                    : Kirigami.Theme.disabledTextColor
             }
         }
 
-        PlasmaComponents3.Label {
-            text: delegate.plasmoidItem.stateText(delegate.modelData)
-            color: delegate.serverState === "online" ? Kirigami.Theme.positiveTextColor
-                : Kirigami.Theme.disabledTextColor
+        // The server's functions, wrapping onto more lines when the popup
+        // is narrow. Indented to line up with the name.
+        Flow {
+            Layout.fillWidth: true
+            Layout.leftMargin: serverRow.dotSize + Kirigami.Units.largeSpacing
+            visible: functions.count > 0
+            spacing: Kirigami.Units.smallSpacing
+
+            Repeater {
+                id: functions
+
+                model: Model.controlFunctions(serverRow.modelData)
+
+                delegate: FunctionControl {
+                    required property var modelData
+
+                    server: serverRow.modelData
+                    fn: modelData
+                    plasmoidItem: serverRow.plasmoidItem
+                    onActivated: turnOn => serverRow.functionActivated(modelData, turnOn)
+                }
+            }
         }
     }
 }
