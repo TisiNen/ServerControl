@@ -133,17 +133,35 @@ PlasmoidItem {
         });
     }
 
-    function readToggle(server, fn) {
+    // `done` (optional) is called when the command has finished, even if
+    // its result is dropped.
+    function readToggle(server, fn, done) {
         const key = Model.functionKey(server, fn);
         const seq = (_readSeq[key] || 0) + 1;
         const generation = _configGeneration;
         _readSeq[key] = seq;
         runner.run(Commands.substitute(fn.stateCommand, server), fn.timeout, result => {
+            if (done) {
+                done();
+            }
             if (generation !== _configGeneration || _readSeq[key] !== seq) {
                 return;
             }
             setFunctionState(key, result.timedOut ? "unknown" : result.exitCode === 0 ? "on" : "off");
         });
+    }
+
+    // Clicking a toggle whose state is "unknown" reads the state again
+    // instead of running onCommand/offCommand: without the current state,
+    // the click has no clear meaning. Marked as running, so the switch
+    // shows the spinner while it waits.
+    function retryToggle(server, fn) {
+        const key = Model.functionKey(server, fn);
+        if (runningFunctions[key]) {
+            return;
+        }
+        setRunning(key, true);
+        readToggle(server, fn, () => setRunning(key, false));
     }
 
     // Toggle states are not polled. They are read when the popup opens,

@@ -26,6 +26,10 @@ Item {
     readonly property bool running: plasmoidItem.runningFunctions[key] === true
     readonly property string unavailableReason:
         Model.unavailableReason(fn, server, plasmoidItem.serverStates[server.id] || "")
+    // A toggle whose state command timed out. It stays clickable, but a
+    // click reads the state again instead of switching (see retryToggle()).
+    readonly property bool stateUnknown: fn.type === "toggle" && fnState === "unknown"
+        && unavailableReason === "" && !running
 
     readonly property string toolTipText: {
         switch (unavailableReason) {
@@ -36,8 +40,8 @@ Item {
         case "unknown":
             return i18n("Waiting for the status of %1", server.name);
         }
-        if (fn.type === "toggle" && fnState === "unknown") {
-            return i18n("Current state unknown: the check timed out");
+        if (stateUnknown) {
+            return i18n("Current state unknown: the check timed out. Click to check again.");
         }
         return "";
     }
@@ -106,14 +110,20 @@ Item {
             checked: control.fnState === "on"
             // Fade the handle out rather than hiding it: the switch places its
             // text after a visible indicator, so `visible: false` would move it.
-            indicator.opacity: control.running ? 0 : 1
+            // The spinner or the warning icon below takes its place.
+            indicator.opacity: control.running || control.stateUnknown ? 0 : 1
             onToggled: {
                 const turnOn = checked;
                 // Clicking set `checked` directly, which removed the binding
                 // above. Restore it: the switch shows the real state, which
                 // is read again after the command has run.
                 checked = Qt.binding(() => control.fnState === "on");
-                control.activated(turnOn);
+                if (control.stateUnknown) {
+                    // No confirmation: reading the state changes nothing.
+                    control.plasmoidItem.retryToggle(control.server, control.fn);
+                } else {
+                    control.activated(turnOn);
+                }
             }
 
             PlasmaComponents3.BusyIndicator {
@@ -122,6 +132,16 @@ Item {
                 height: width
                 visible: control.running
                 running: visible
+            }
+
+            // State unknown: a warning sign instead of the handle, so it
+            // looks neither like a working switch nor like a disabled one.
+            Kirigami.Icon {
+                anchors.centerIn: toggleSwitch.indicator
+                width: toggleSwitch.indicator.height
+                height: width
+                source: "dialog-warning"
+                visible: control.stateUnknown
             }
         }
     }

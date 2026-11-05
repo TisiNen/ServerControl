@@ -4,18 +4,18 @@ Nov 4, 2026 · @Tilo
 
 ## How to read this guide
 
-This guide teaches QML using only the Server Control widget as it stands partway through phase 2 (the JSON config model, all three function types and the confirmation dialog are in; inline feedback and faster polling after Wake are not yet): 9 source files, about 1050 lines. Read Part 1 first, then follow a status check and a click through the code in Part 3; the per-file notes in Part 4 are for looking things up.
+This guide teaches QML using only the Server Control widget as it stands partway through phase 2 (the JSON config model, all three function types and the confirmation dialog are in; inline feedback and faster polling after Wake are not yet): 9 source files, about 1090 lines. Read Part 1 first, then follow a status check and a click through the code in Part 3; the per-file notes in Part 4 are for looking things up.
 
 | File | Lines | Language | What it is |
 | --- | --- | --- | --- |
 | `package/metadata.json` | 18 | JSON | Tells Plasma this folder is a widget: name, icon, plugin ID |
 | `package/contents/config/main.xml` | 15 | XML | The config schema: one `servers` key holding JSON |
-| `package/contents/ui/main.qml` | 296 | QML | The root of the widget: config, state, timer, running all commands |
+| `package/contents/ui/main.qml` | 314 | QML | The root of the widget: config, state, timer, running all commands |
 | `package/contents/ui/CommandRunner.qml` | 52 | QML | Runs shell commands in the background and calls you back |
 | `package/contents/ui/CompactRepresentation.qml` | 55 | QML | The panel icon with its coloured dot and spinner |
 | `package/contents/ui/FullRepresentation.qml` | 124 | QML | The popup: heading, refresh button, config warning, server list, confirmation dialog |
 | `package/contents/ui/ServerDelegate.qml` | 101 | QML | One server in the popup list: dot, name, state and its functions |
-| `package/contents/ui/FunctionControl.qml` | 141 | QML | One function: status indicator, action button or toggle switch |
+| `package/contents/ui/FunctionControl.qml` | 161 | QML | One function: status indicator, action button or toggle switch |
 | `package/contents/ui/code/model.js` | 215 | JavaScript | Parses and validates the `servers` config JSON; availability rules |
 | `package/contents/ui/code/commands.js` | 52 | JavaScript | Placeholder substitution, shell quoting, timeout wrapping |
 
@@ -327,8 +327,8 @@ A timer starts the ping, `CommandRunner` runs it in the background, and one assi
 
 The top two rows are code that runs; the bottom row updates by itself because each part binds to `serverStates`.
 
-1. **The widget starts.** Plasma creates the `PlasmoidItem` in `main.qml`. `Component.onCompleted` (`main.qml:249`) calls `applyConfig()` (`main.qml:213-247`), which reads `Plasmoid.configuration.servers` and passes it to `Model.parseServers()`. Say the config holds one server "NAS" at `192.168.1.10` with id `nas` and a ping status function; then `serverList` becomes an array with that one server. `serverStates` starts as `{}`, so every server counts as "not checked yet".
-2. **The timer fires.** `Timer` has `triggeredOnStart: true`, so `onTriggered` runs right away, then every 1000 ms (`main.qml:280-295`). For each status function of each server it compares `Date.now()` with `_nextCheck[key]`, where `key` is `Model.functionKey(s, fn)`, e.g. `"nas/ping"`. Nothing is stored yet, so `|| 0` makes the check due and it calls `checkStatus(s, fn)`.
+1. **The widget starts.** Plasma creates the `PlasmoidItem` in `main.qml`. `Component.onCompleted` (`main.qml:267`) calls `applyConfig()` (`main.qml:229-265`), which reads `Plasmoid.configuration.servers` and passes it to `Model.parseServers()`. Say the config holds one server "NAS" at `192.168.1.10` with id `nas` and a ping status function; then `serverList` becomes an array with that one server. `serverStates` starts as `{}`, so every server counts as "not checked yet".
+2. **The timer fires.** `Timer` has `triggeredOnStart: true`, so `onTriggered` runs right away, then every 1000 ms (`main.qml:298-313`). For each status function of each server it compares `Date.now()` with `_nextCheck[key]`, where `key` is `Model.functionKey(s, fn)`, e.g. `"nas/ping"`. Nothing is stored yet, so `|| 0` makes the check due and it calls `checkStatus(s, fn)`.
 3. **checkStatus prepares the command** (`main.qml:114-134`).
    1. `primary` is true if `fn` is the server's first status function (`Model.statusFunction(server)`). Only that one decides online or offline.
    2. If a check for this function is already running (`_checking[key]`), it stops here. This prevents two pings piling up when a host is slow.
@@ -354,10 +354,10 @@ A note on step 8: `toolTipSubText` and the delegate's label call a *function*, `
 
 Say "Skip alarm" is a toggle with `confirm: true`, the server is online and the switch shows on. The user clicks it.
 
-1. **The switch reacts** (`FunctionControl.qml:110-117`). `onToggled` reads the new `checked` (false), restores the binding \[17\] and emits `activated(false)` \[16\].
+1. **The switch reacts** (`FunctionControl.qml:115-126`). `onToggled` reads the new `checked` (false), restores the binding \[17\] and emits `activated(false)` \[16\].
 2. **The signal travels up.** `ServerDelegate.qml:96` turns it into `functionActivated(fn, false)`; `FullRepresentation.qml:83` calls `full.activate(modelData, fn, false)`.
 3. **Confirm first** (`FullRepresentation.qml:25-31`). `fn.confirm` is true, so `confirmDialog.ask()` fills the dialog and opens it \[19\]. Its title reads "Turn off “Skip alarm” on NAS?". If the user cancels, nothing else happens; the switch still shows the real state because of step 1.
-4. **The command runs** (`main.qml:179-205`). `onAccepted` calls `runFunction(server, fn, false)`. It checks once more that the function isn't running and is available, picks `offCommand`, marks the function as running and counts up `actionsRunning`. In the popup, the switch is disabled and a spinner takes the place of its handle; in the panel, the icon dims and a spinner turns over it.
+4. **The command runs** (`main.qml:195-223`). `onAccepted` calls `runFunction(server, fn, false)`. It checks once more that the function isn't running and is available, picks `offCommand`, marks the function as running and counts up `actionsRunning`. In the popup, the switch is disabled and a spinner takes the place of its handle; in the panel, the icon dims and a spinner turns over it.
 5. **The result arrives.** For an action with a `verifyCommand`, that command runs next and its result counts instead. Then `finish` clears the running mark, counts down and calls `refreshServer(server)`.
 6. **Everything is read again.** `refreshServer` runs the server's status checks and `refreshToggles`, which runs every available toggle's `stateCommand` through `readToggle()`. When "Skip alarm"'s state command exits non-zero, `setFunctionState(key, "off")` updates `functionStates`, and the switch's binding shows it off.
 
@@ -378,16 +378,17 @@ The root of the widget and the only place that holds state. Everything else read
 - **Lines 55-72, `stateText()` and `functionName()`:** translated labels. `i18n()` is Plasma's translation function; every user-visible string goes through it.
 - **Lines 74-110, setters:** `setServerState()`, `setFunctionState()` and `setRunning()` use the copy-and-assign pattern. `setServerState()` also reads the toggles when a server comes online.
 - **Lines 112-134, `checkStatus()`:** see Part 3, step 3.
-- **Lines 136-147, `readToggle()`:** runs `stateCommand`. Exit 0 means on, other codes off, a timeout `"unknown"`.
-- **Lines 149-175, `refreshToggles()`, `refreshServer()`, `refreshAll()`:** toggles are never polled, only read on these occasions. `refreshToggles()` skips toggles that are running or unavailable, e.g. an SSH check while the server is off.
-- **Lines 177-205, `runFunction()`:** see "A click, start to finish". `finish` is an arrow function stored in a `const` and passed as a callback to one of two `runner.run()` calls. It always counts down, even after a config change, so `actionsRunning` can't get stuck.
-- **Lines 207-209, tooltip:** `i18nc("context", "%1: %2", a, b)` is `i18n` with a hint for translators; `%1` and `%2` are filled from the arguments.
-- **Lines 211-247, `applyConfig()`:** returns early if the config string is the one already parsed. Otherwise it parses, logs each warning with `console.warn` (visible in `journalctl`), keeps only the states of servers and functions that still exist, clears the bookkeeping so every status function is checked on the next timer tick, and reads the toggles that are available.
-- **Lines 249-257:** `Component.onCompleted` and `Connections` \[13\] call `applyConfig()` at startup and on every change of the `servers` key.
-- **Lines 259-263, `onExpandedChanged`:** a property-change handler \[6\] that refreshes everything, toggles included, when the popup opens.
-- **Lines 265-271:** the two representations, each handed a reference to `root` (Part 2).
-- **Lines 273-275:** one `CommandRunner` instance, named `runner` \[8\]. It isn't visual; a `PlasmoidItem` can hold non-visual children.
-- **Lines 280-295, `Timer`:** one timer ticking every second, instead of one per status function. Each function's next check time is stored in `_nextCheck`, so functions can have different intervals and a later step of phase 2 can speed one up after Wake. Inside the handler, the code writes `root.serverList` and `root.checkStatus` with the id: inside a child object, being explicit avoids confusion with the Timer's own properties.
+- **Lines 136-152, `readToggle()`:** runs `stateCommand`. Exit 0 means on, other codes off, a timeout `"unknown"`. The optional `done` callback runs whenever the command finishes, even when the result is dropped, so whoever passed it can always clean up.
+- **Lines 154-165, `retryToggle()`:** what a click on a toggle in the `"unknown"` state does: it reads the state again instead of switching, since without the current state the click has no clear meaning. It marks the toggle as running for the read, so the switch shows the spinner, and passes `done` to clear the mark. It doesn't count up `actionsRunning`: a read changes nothing on the server.
+- **Lines 167-193, `refreshToggles()`, `refreshServer()`, `refreshAll()`:** toggles are never polled, only read on these occasions. `refreshToggles()` skips toggles that are running or unavailable, e.g. an SSH check while the server is off.
+- **Lines 195-223, `runFunction()`:** see "A click, start to finish". `finish` is an arrow function stored in a `const` and passed as a callback to one of two `runner.run()` calls. It always counts down, even after a config change, so `actionsRunning` can't get stuck.
+- **Lines 225-227, tooltip:** `i18nc("context", "%1: %2", a, b)` is `i18n` with a hint for translators; `%1` and `%2` are filled from the arguments.
+- **Lines 229-265, `applyConfig()`:** returns early if the config string is the one already parsed. Otherwise it parses, logs each warning with `console.warn` (visible in `journalctl`), keeps only the states of servers and functions that still exist, clears the bookkeeping so every status function is checked on the next timer tick, and reads the toggles that are available.
+- **Lines 267-275:** `Component.onCompleted` and `Connections` \[13\] call `applyConfig()` at startup and on every change of the `servers` key.
+- **Lines 277-281, `onExpandedChanged`:** a property-change handler \[6\] that refreshes everything, toggles included, when the popup opens.
+- **Lines 283-289:** the two representations, each handed a reference to `root` (Part 2).
+- **Lines 291-293:** one `CommandRunner` instance, named `runner` \[8\]. It isn't visual; a `PlasmoidItem` can hold non-visual children.
+- **Lines 298-313, `Timer`:** one timer ticking every second, instead of one per status function. Each function's next check time is stored in `_nextCheck`, so functions can have different intervals and a later step of phase 2 can speed one up after Wake. Inside the handler, the code writes `root.serverList` and `root.checkStatus` with the id: inside a child object, being explicit avoids confusion with the Timer's own properties.
 
 ### CommandRunner.qml
 
@@ -445,11 +446,11 @@ One function in the popup. A single file handles all three types: each child has
 
 - **Lines 14-16, required properties:** the server, the function and the root item. `ServerDelegate.qml` sets them \[3\].
 - **Line 21, `signal activated(bool turnOn)`:** the click goes out as a signal \[16\]; this file never runs anything itself.
-- **Lines 23-43, derived state:** `fnState`, `running` and `unavailableReason` read the maps in `main.qml`, so the control updates when they are replaced \[4\]. `toolTipText` turns the reason into a translated sentence.
-- **Lines 55-72, extra status function:** a small dot and the name, like the server's own dot. Status functions never show a spinner: they don't count as running.
-- **Lines 77-98, action:** a `ToolButton` with the function's icon, disabled while unavailable or running. While running, `icon.name` becomes empty, so the button falls back to `icon.source`, a blank image (`contents/images/blank.svg`). The icon's space stays, and a `BusyIndicator` declared inside the button sits exactly there. An empty icon with no fallback would remove the space and make the button narrower, and the `Flow` would reflow \[15\].
-- **Lines 100-126, toggle:** a `Switch` whose `checked` is bound to the state read from the server. `onToggled` restores that binding \[17\] before emitting the wanted state. While running, `indicator.opacity` fades the handle out and a `BusyIndicator` is centred on it. `indicator.opacity: …` sets a property of an object that belongs to the Switch, like `anchors.fill`. `visible: false` would not do here: the Switch moves its text when the indicator is invisible.
-- **Lines 129-140, tooltip:** a `HoverHandler` \[18\] on the wrapper, because the disabled button itself gets no hover events. The `ToolTip` only shows when there is something to say.
+- **Lines 23-47, derived state:** `fnState`, `running` and `unavailableReason` read the maps in `main.qml`, so the control updates when they are replaced \[4\]. `stateUnknown` is true for a toggle whose state command timed out, but only while it could otherwise be clicked: a disabled toggle looks disabled, whatever its last state. `toolTipText` turns the reason into a translated sentence.
+- **Lines 58-76, extra status function:** a small dot and the name, like the server's own dot. Status functions never show a spinner: they don't count as running.
+- **Lines 81-102, action:** a `ToolButton` with the function's icon, disabled while unavailable or running. While running, `icon.name` becomes empty, so the button falls back to `icon.source`, a blank image (`contents/images/blank.svg`). The icon's space stays, and a `BusyIndicator` declared inside the button sits exactly there. An empty icon with no fallback would remove the space and make the button narrower, and the `Flow` would reflow \[15\].
+- **Lines 104-146, toggle:** a `Switch` whose `checked` is bound to the state read from the server. `onToggled` restores that binding \[17\] before emitting the wanted state, or, if the state is unknown, calls `plasmoidItem.retryToggle()` directly: a read needs no confirmation, so it skips the route through `ServerDelegate` and `FullRepresentation`. While the state is unknown, the handle is faded out like for the spinner and a `Kirigami.Icon` with `dialog-warning` takes its place, so the switch looks neither working nor disabled. While running, `indicator.opacity` fades the handle out and a `BusyIndicator` is centred on it. `indicator.opacity: …` sets a property of an object that belongs to the Switch, like `anchors.fill`. `visible: false` would not do here: the Switch moves its text when the indicator is invisible.
+- **Lines 149-160, tooltip:** a `HoverHandler` \[18\] on the wrapper, because the disabled button itself gets no hover events. The `ToolTip` only shows when there is something to say.
 
 ### code/model.js
 
