@@ -121,6 +121,19 @@ Shared fields:
 Toggle states are **not** polled continuously, to avoid constant SSH connections. They refresh
 when the popup opens, after any action on that server, and when the server comes online.
 
+Details of the implementation:
+
+- Further `status` functions after the first run on their own interval too and show as a small
+  indicator (ok / failed) in the popup. They don't affect the online state.
+- An action's `verifyCommand` runs after `command` has finished, whatever its exit code.
+- A toggle whose `stateCommand` times out shows as "unknown" (switch off, tooltip explains).
+  A toggle that isn't available in the current server state is not read at all.
+- `availableWhen` `online`/`offline` disables the control while the server's state is not known
+  yet. A server without a `status` function has no online state, so all its functions are
+  available.
+- After an action or toggle command, all status checks and toggle states of that server are read
+  again.
+
 ### Placeholders
 
 Substituted in every command before it runs:
@@ -195,6 +208,7 @@ package/
         ├── CompactRepresentation.qml
         ├── FullRepresentation.qml
         ├── ServerDelegate.qml
+        ├── FunctionControl.qml # one function: status indicator, action button or toggle switch
         ├── CommandRunner.qml # wraps the executable data engine
         ├── ConfigServers.qml # settings page (KCM.SimpleKCM)
         ├── ConfigGeneral.qml
@@ -286,6 +300,8 @@ Rules:
   Invalid JSON is passed through as is, to test the fallback.
 - `console.log` output is filtered in the sandbox; use `console.warn` for temporary debug output,
   and remove it afterwards.
+- The first run after an image rebuild takes a few minutes: `--userns=keep-id` makes Podman
+  copy the image once. Later runs take about 20 s. Run long ones in the background.
 - Don't install into the user's live panel or restart `plasmashell` without asking, because
   that affects the running desktop.
 
@@ -306,9 +322,9 @@ Work in phases. Each phase should be usable and testable on its own.
    the test fail.
 1. **Skeleton**: package layout, metadata, compact and full representations, `CommandRunner`
    with timeout. One server hardcoded in JS, with ping status shown as a dot.
-2. **Generic model** (in progress; JSON config model done): JSON config model, all three
-   function types, placeholders, confirmation dialog, inline feedback, faster polling after
-   wake/poweroff.
+2. **Generic model** (in progress; JSON config model, function types, placeholders and
+   confirmation dialog done): JSON config model, all three function types, placeholders,
+   confirmation dialog, inline feedback, faster polling after wake/poweroff.
 3. **Settings UI**: server and function editor, templates, JSON import/export.
 4. **Later options**:
    - Panel mode: one icon for all servers vs. one dot per server in the compact view, plus a

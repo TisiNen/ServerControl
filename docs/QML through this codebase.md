@@ -339,25 +339,42 @@ The panel icon. The root is a `MouseArea`, an invisible item that receives click
 
 The popup.
 
-- **Line 8, `PlasmaExtras.Representation`:** a popup container with `header` and `contentItem` slots, so the heading and list get the standard Plasma look.
-- **Lines 13-16, `Layout.*` sizes:** tell Plasma how big the popup may be, in grid units (multiples of the font size).
-- **Line 18, `collapseMarginsHint`:** lets the list run to the popup's edges instead of sitting inside a margin.
-- **Lines 20-42, header:** a `RowLayout` with a heading that takes all spare width (`Layout.fillWidth`) and a refresh button. The button has `text` even though it shows only an icon (`display: IconOnly`); the text is used by screen readers and by its own tooltip (`ToolTip.text: text`). `ToolTip.*` are attached properties \[11\].
-- **Lines 44-80, list:** a `ScrollView` around a `ListView` \[9\]. `width: ListView.view.width` is an attached property that makes each row as wide as the list. `clip: true` stops rows from drawing outside the list while scrolling.
-- **Lines 52-65, config warning:** the list's `header` is an inline `Component` \[14\], set only when `configWarnings` isn't empty. `Kirigami.InlineMessage` is hidden by default, hence `visible: true`. It doesn't list the problems, which are English developer messages; it points to the log.
-- **Lines 72-78, `PlaceholderMessage`:** a child of the ListView, centred on it, shown only when `list.count === 0`, which is the case with the default config `[]`.
+- **Line 11, `PlasmaExtras.Representation`:** a popup container with `header` and `contentItem` slots, so the heading and list get the standard Plasma look.
+- **Lines 16-19, `Layout.*` sizes:** tell Plasma how big the popup may be, in grid units (multiples of the font size).
+- **Line 21, `collapseMarginsHint`:**
+- **Lines 23-31, `activate()`:** where every click on a function ends up. It opens the confirmation dialog if the function has `confirm` set, otherwise runs it right away. lets the list run to the popup's edges instead of sitting inside a margin.
+- **Lines 33-55, header:** a `RowLayout` with a heading that takes all spare width (`Layout.fillWidth`) and a refresh button. The button has `text` even though it shows only an icon (`display: IconOnly`); the text is used by screen readers and by its own tooltip (`ToolTip.text: text`). `ToolTip.*` are attached properties \[11\].
+- **Lines 57-94, list:** a `ScrollView` around a `ListView` \[9\]. `width: ListView.view.width` is an attached property that makes each row as wide as the list. `clip: true` stops rows from drawing outside the list while scrolling. `onFunctionActivated` (line 83) receives the signal from a server row \[16\]; `modelData` there is the row's server.
+- **Lines 65-78, config warning:** the list's `header` is an inline `Component` \[14\], set only when `configWarnings` isn't empty. `Kirigami.InlineMessage` is hidden by default, hence `visible: true`. It doesn't list the problems, which are English developer messages; it points to the log.
+- **Lines 86-92, `PlaceholderMessage`:** a child of the ListView, centred on it, shown only when `list.count === 0`, which is the case with the default config `[]`.
+- **Lines 96-123, `confirmDialog`:** a `Kirigami.PromptDialog` \[19\]. `server`, `fn` and `turnOn` are set by `ask()`; `title` and `subtitle` are bindings on them, so the text is right the moment the dialog opens. The subtitle shows the exact command after placeholder substitution. `preferredWidth` keeps the dialog narrower than the popup.
 
 ### ServerDelegate.qml
 
-One row of the list, created once per server by the `ListView`.
+One server in the list, created once per server by the `ListView`. The root id is `serverRow`, not `delegate`: inside the `Repeater` below, `delegate` is also a property name, and the id would be easy to confuse with it.
 
-- **Line 7:** the root is a plain `Item`, a blank invisible container.
-- **Line 10, `modelData`:** filled in by the ListView with this row's server object \[9\].
-- **Line 14, `serverState`:** looks up this server's state, or `""` if there is none yet.
-- **Line 16, `implicitHeight`:** the row is as tall as its content plus a small margin. A ListView needs each delegate to have a height.
-- **Lines 26-36, dot:** a circle in a `RowLayout`, so it uses `implicitWidth` instead of `width` \[10\]. Not checked yet means transparent fill with a 1 px border: an empty ring.
-- **Lines 38-55:** name above host, the host smaller and at 70% opacity. `elide: Text.ElideRight` cuts long text with … instead of overflowing.
-- **Lines 57-61:** the state label, coloured green when online.
+- **Line 9:** the root is a plain `Item`, a blank invisible container.
+- **Line 12, `modelData`:** filled in by the ListView with this server object \[9\].
+- **Lines 15-17, `functionActivated`:** a signal of its own \[16\], forwarding a click from one of its `FunctionControl`s together with the function.
+- **Line 20, `serverState`:** looks up this server's state, or `""` if there is none yet.
+- **Line 23, `implicitHeight`:** the row is as tall as its content plus a small margin. A ListView needs each delegate to have a height.
+- **Lines 39-49, dot:** a circle in a `RowLayout`, so it uses `implicitWidth` instead of `width` \[10\]. Not checked yet means transparent fill with a 1 px border: an empty ring.
+- **Lines 51-68:** name above host, the host smaller and at 70% opacity. `elide: Text.ElideRight` cuts long text with … instead of overflowing.
+- **Lines 70-74:** the state label, coloured green when online.
+- **Lines 79-99, functions:** a `Flow` with a `Repeater` \[15\], one `FunctionControl` per function except the first status function, which is already the dot. `Layout.leftMargin` indents the controls to line up with the name. `visible: functions.count > 0` hides the empty Flow for a server with only a status check.
+
+### FunctionControl.qml
+
+One function in the popup. A single file handles all three types: each child has `visible` set by `fn.type`, and an invisible child takes no space in a layout.
+
+- **Lines 14-16, required properties:** the server, the function and the root item. `ServerDelegate.qml` sets them \[3\].
+- **Line 21, `signal activated(bool turnOn)`:** the click goes out as a signal \[16\]; this file never runs anything itself.
+- **Lines 23-43, derived state:** `fnState`, `running` and `unavailableReason` read the maps in `main.qml`, so the control updates when they are replaced \[4\]. `toolTipText` turns the reason into a translated sentence.
+- **Lines 55-72, extra status function:** a small dot and the name, like the server's own dot.
+- **Lines 74-80, action:** a `ToolButton` with the function's icon. Disabled while unavailable or running.
+- **Lines 82-95, toggle:** a `Switch` whose `checked` is bound to the state read from the server. `onToggled` restores that binding \[17\] before emitting the wanted state.
+- **Lines 97-102, spinner:** shown next to the control while its command runs.
+- **Lines 105-116, tooltip:** a `HoverHandler` \[18\] on the wrapper, because the disabled button itself gets no hover events. The `ToolTip` only shows when there is something to say.
 
 ### code/model.js
 
@@ -369,6 +386,9 @@ Pure data helpers, no QML \[12\]. Turns the `servers` config string into objects
 - **`asSeconds()`, `asString()`, `oneOf()`:** small type checks with a fallback. `asSeconds("30")` accepts a numeric string; `0`, negatives and `true` fall back.
 - **`serializeServers(servers)`:** `JSON.stringify` for writing the config, used from phase 3 on.
 - **`statusFunction(server)`:** returns the first function whose `type` is `"status"`, or `null`. The `(server && server.functions) || []` guard means a malformed server can't crash it.
+- **`controlFunctions(server)`:** all functions except the first status function, for the controls in the popup.
+- **`functionKey(server, fn)`:** `"<serverId>/<functionId>"`, the key for `functionStates` and `runningFunctions`.
+- **`unavailableReason(fn, server, serverState)`:** `""` if the function can run now, otherwise `"needsOnline"`, `"needsOffline"` or `"unknown"` (status not checked yet). It returns codes, not sentences, because `.pragma library` files have no `i18n()`; `FunctionControl.qml` translates them.
 
 ### code/commands.js
 
