@@ -71,19 +71,42 @@ Item {
             font: Kirigami.Theme.smallFont
         }
 
+        // While a command runs, a spinner takes the place of the button's
+        // icon or the switch's handle. Both keep their size, so the row
+        // doesn't reflow when the spinner appears.
         PlasmaComponents3.ToolButton {
+            id: button
+
             visible: control.fn.type === "action"
             enabled: control.unavailableReason === "" && !control.running
-            icon.name: control.fn.icon
+            // An empty icon name would remove the icon and shrink the button;
+            // a blank image keeps its space for the spinner.
+            icon.name: control.running ? "" : control.fn.icon
+            icon.source: Qt.resolvedUrl("../images/blank.svg")
             text: control.plasmoidItem.functionName(control.fn)
             onClicked: control.activated(true)
+
+            PlasmaComponents3.BusyIndicator {
+                // Where the button draws its icon: flat buttons use smallMedium.
+                x: button.leftPadding
+                anchors.verticalCenter: parent.verticalCenter
+                width: Kirigami.Units.iconSizes.smallMedium
+                height: width
+                visible: control.running
+                running: visible
+            }
         }
 
         PlasmaComponents3.Switch {
+            id: toggleSwitch
+
             visible: control.fn.type === "toggle"
             enabled: control.unavailableReason === "" && !control.running
             text: control.plasmoidItem.functionName(control.fn)
             checked: control.fnState === "on"
+            // Fade the handle out rather than hiding it: the switch places its
+            // text after a visible indicator, so `visible: false` would move it.
+            indicator.opacity: control.running ? 0 : 1
             onToggled: {
                 const turnOn = checked;
                 // Clicking set `checked` directly, which removed the binding
@@ -92,13 +115,14 @@ Item {
                 checked = Qt.binding(() => control.fnState === "on");
                 control.activated(turnOn);
             }
-        }
 
-        PlasmaComponents3.BusyIndicator {
-            visible: control.running
-            running: visible
-            Layout.preferredWidth: Kirigami.Units.iconSizes.small
-            Layout.preferredHeight: Kirigami.Units.iconSizes.small
+            PlasmaComponents3.BusyIndicator {
+                anchors.centerIn: toggleSwitch.indicator
+                width: toggleSwitch.indicator.height
+                height: width
+                visible: control.running
+                running: visible
+            }
         }
     }
 

@@ -22,12 +22,24 @@ MouseArea {
     onPressed: wasExpanded = plasmoidItem.expanded
     onClicked: plasmoidItem.expanded = !wasExpanded
 
+    // While an action runs, the icon dims and a spinner turns over it.
+    // The dot stays, so the servers' state is always visible.
     Kirigami.Icon {
         anchors.fill: parent
         source: Plasmoid.icon
         active: compact.containsMouse
+        opacity: compact.plasmoidItem.busy ? 0.4 : 1
     }
 
+    PlasmaComponents3.BusyIndicator {
+        anchors.centerIn: parent
+        width: Math.round(Math.min(compact.width, compact.height) * 0.7)
+        height: width
+        running: compact.plasmoidItem.busy
+        visible: running
+    }
+
+    // Declared last, so it is drawn on top of the spinner.
     Rectangle {
         id: dot
 
@@ -39,12 +51,5 @@ MouseArea {
         color: compact.dotColor
         border.color: Kirigami.Theme.backgroundColor
         border.width: 1
-        visible: !compact.plasmoidItem.busy
-    }
-
-    PlasmaComponents3.BusyIndicator {
-        anchors.fill: dot
-        running: compact.plasmoidItem.busy
-        visible: running
     }
 }
