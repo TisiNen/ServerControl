@@ -218,9 +218,14 @@ package/
             └── commands.js   # placeholder substitution and quoting
 
 tools/
+├── set-config.sh             # writes a server list JSON file into the running widget(s)
 └── sandbox/
     ├── Containerfile         # Podman image with Plasma 6, plasmoidviewer, Xvfb
     └── load-test.sh          # builds the image if needed, runs the load test
+
+examples/
+├── demo-local.json           # every function type, harmless local commands only (/tmp)
+└── home-server.json          # a realistic server; edit host, mac, user and paths first
 ```
 
 ### APIs to use
@@ -250,6 +255,7 @@ kpackagetool6 -t Plasma/Applet -i package/                 # install
 kpackagetool6 -t Plasma/Applet -u package/                 # update after changes
 systemctl --user restart plasma-plasmashell                # reload the panel if needed
 journalctl --user -f | grep -i -E "qml|plasmashell"        # QML errors
+tools/set-config.sh examples/demo-local.json               # load a test config into the running widget
 ```
 
 ### Self-testing (for Claude): load test in a Podman sandbox

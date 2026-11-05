@@ -1,0 +1,164 @@
+[
+  {
+    "id": "demo",
+    "name": "Demo (local, fake server)",
+    "host": "demo.invalid",
+    "mac": "00:11:22:33:44:55",
+    "user": "demo",
+    "functions": [
+      {
+        "id": "online",
+        "type": "status",
+        "name": "Online",
+        "command": "test -f /tmp/servercontrol-demo/online",
+        "interval": 5
+      },
+      {
+        "id": "web",
+        "type": "status",
+        "name": "Web (always fails)",
+        "command": "false",
+        "interval": 10
+      },
+      {
+        "id": "wake",
+        "type": "action",
+        "name": "Wake",
+        "icon": "system-run",
+        "command": "sleep 2 && mkdir -p /tmp/servercontrol-demo && touch /tmp/servercontrol-demo/online",
+        "verifyCommand": "test -f /tmp/servercontrol-demo/online",
+        "availableWhen": "offline",
+        "confirm": false,
+        "timeout": 10
+      },
+      {
+        "id": "poweroff",
+        "type": "action",
+        "name": "Power off",
+        "icon": "system-shutdown",
+        "command": "sleep 2 && rm -f /tmp/servercontrol-demo/online",
+        "availableWhen": "online",
+        "confirm": true,
+        "timeout": 10
+      },
+      {
+        "id": "slow",
+        "type": "action",
+        "name": "Slow (3 s)",
+        "icon": "chronometer",
+        "command": "sleep 3",
+        "availableWhen": "always",
+        "confirm": false,
+        "timeout": 10
+      },
+      {
+        "id": "fail",
+        "type": "action",
+        "name": "Fails",
+        "icon": "dialog-error",
+        "command": "echo 'something went wrong' >&2; exit 1",
+        "availableWhen": "always",
+        "confirm": false,
+        "timeout": 10
+      },
+      {
+        "id": "timeout",
+        "type": "action",
+        "name": "Times out (2 s)",
+        "icon": "process-stop",
+        "command": "sleep 30",
+        "availableWhen": "always",
+        "confirm": false,
+        "timeout": 2
+      },
+      {
+        "id": "skip-alarm",
+        "type": "toggle",
+        "name": "Skip alarm",
+        "icon": "alarm-symbolic",
+        "stateCommand": "test -f /tmp/servercontrol-demo/skip-alarm",
+        "onCommand": "mkdir -p /tmp/servercontrol-demo && touch /tmp/servercontrol-demo/skip-alarm",
+        "offCommand": "rm -f /tmp/servercontrol-demo/skip-alarm",
+        "availableWhen": "online",
+        "confirm": true,
+        "timeout": 10
+      },
+      {
+        "id": "skip-shutdown",
+        "type": "toggle",
+        "name": "Skip shutdown",
+        "icon": "system-shutdown",
+        "stateCommand": "test -f /tmp/servercontrol-demo/skip-shutdown",
+        "onCommand": "sleep 1 && mkdir -p /tmp/servercontrol-demo && touch /tmp/servercontrol-demo/skip-shutdown",
+        "offCommand": "sleep 1 && rm -f /tmp/servercontrol-demo/skip-shutdown",
+        "availableWhen": "online",
+        "confirm": false,
+        "timeout": 10
+      },
+      {
+        "id": "stuck",
+        "type": "toggle",
+        "name": "State times out",
+        "stateCommand": "sleep 30",
+        "onCommand": "true",
+        "offCommand": "true",
+        "availableWhen": "always",
+        "confirm": false,
+        "timeout": 2
+      }
+    ]
+  },
+  {
+    "id": "offline",
+    "name": "Always offline",
+    "host": "offline.invalid",
+    "functions": [
+      {
+        "id": "online",
+        "type": "status",
+        "name": "Online",
+        "command": "false",
+        "interval": 30
+      },
+      {
+        "id": "wake",
+        "type": "action",
+        "name": "Wake (verify fails)",
+        "icon": "system-run",
+        "command": "sleep 1",
+        "verifyCommand": "false",
+        "availableWhen": "offline",
+        "confirm": false,
+        "timeout": 10
+      },
+      {
+        "id": "poweroff",
+        "type": "action",
+        "name": "Power off",
+        "icon": "system-shutdown",
+        "command": "true",
+        "availableWhen": "online",
+        "confirm": true,
+        "timeout": 10
+      }
+    ]
+  },
+  {
+    "id": "nostatus",
+    "name": "No status check",
+    "host": "nostatus.invalid",
+    "functions": [
+      {
+        "id": "flag",
+        "type": "toggle",
+        "name": "Flag (needs online, but no status)",
+        "stateCommand": "test -f /tmp/servercontrol-demo/flag",
+        "onCommand": "mkdir -p /tmp/servercontrol-demo && touch /tmp/servercontrol-demo/flag",
+        "offCommand": "rm -f /tmp/servercontrol-demo/flag",
+        "availableWhen": "online",
+        "confirm": false,
+        "timeout": 10
+      }
+    ]
+  }
+]

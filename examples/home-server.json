@@ -1,0 +1,76 @@
+[
+  {
+    "id": "nas",
+    "name": "NAS",
+    "host": "192.168.1.10",
+    "mac": "aa:bb:cc:dd:ee:ff",
+    "user": "admin",
+    "functions": [
+      {
+        "id": "online",
+        "type": "status",
+        "name": "Online",
+        "icon": "network-connect",
+        "command": "ping -c 1 -W 1 {host}",
+        "interval": 30
+      },
+      {
+        "id": "wake",
+        "type": "action",
+        "name": "Wake",
+        "icon": "system-run",
+        "command": "wakeonlan {mac}",
+        "verifyCommand": "",
+        "availableWhen": "offline",
+        "confirm": false,
+        "timeout": 10
+      },
+      {
+        "id": "skip-alarm",
+        "type": "toggle",
+        "name": "Skip alarm",
+        "icon": "alarm-symbolic",
+        "stateCommand": "{ssh} test -f /var/lib/autoshutdown/skip-alarm",
+        "onCommand": "{ssh} touch /var/lib/autoshutdown/skip-alarm",
+        "offCommand": "{ssh} rm -f /var/lib/autoshutdown/skip-alarm",
+        "availableWhen": "online",
+        "confirm": false,
+        "timeout": 10
+      },
+      {
+        "id": "skip-shutdown",
+        "type": "toggle",
+        "name": "Skip shutdown",
+        "icon": "system-shutdown",
+        "stateCommand": "{ssh} test -f /var/lib/autoshutdown/skip-shutdown",
+        "onCommand": "{ssh} touch /var/lib/autoshutdown/skip-shutdown",
+        "offCommand": "{ssh} rm -f /var/lib/autoshutdown/skip-shutdown",
+        "availableWhen": "online",
+        "confirm": false,
+        "timeout": 10
+      },
+      {
+        "id": "reboot",
+        "type": "action",
+        "name": "Reboot",
+        "icon": "system-reboot",
+        "command": "{ssh} sudo systemctl reboot",
+        "verifyCommand": "",
+        "availableWhen": "online",
+        "confirm": true,
+        "timeout": 15
+      },
+      {
+        "id": "poweroff",
+        "type": "action",
+        "name": "Power off",
+        "icon": "system-shutdown",
+        "command": "{ssh} sudo systemctl poweroff",
+        "verifyCommand": "",
+        "availableWhen": "online",
+        "confirm": true,
+        "timeout": 15
+      }
+    ]
+  }
+]
