@@ -165,7 +165,7 @@ in the settings UI.
   - green: all servers online
   - orange: some servers online
   - grey: none online
-  - spinner: an action is running
+- While an action runs, the icon dims and a spinner turns over it. The dot stays visible.
 - Tooltip: a one-line summary per server.
 
 ### Full representation (popup)
