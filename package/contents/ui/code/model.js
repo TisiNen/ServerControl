@@ -213,3 +213,26 @@ function unavailableReason(fn, server, serverState) {
     }
     return "";
 }
+
+// Faster status polling after an action that should change the server's
+// online state (Wake, Power off, Reboot), so the change shows up quickly.
+const FAST_POLL_INTERVAL = 5;
+const FAST_POLL_DURATION = 120;
+
+// An action that can only run online or only offline is expected to change
+// the online state. Actions available `always` (e.g. opening a web page)
+// don't trigger faster polling.
+function changesOnlineState(fn) {
+    return fn.type === "action" && (fn.availableWhen === "online" || fn.availableWhen === "offline");
+}
+
+// Seconds until a status function runs again. `fastPollUntil` is the end of
+// the server's fast-polling period (a timestamp in ms, 0 if none).
+function checkInterval(fn, fastPollUntil, now) {
+    return fastPollUntil > now ? Math.min(fn.interval, FAST_POLL_INTERVAL) : fn.interval;
+}
+
+// How long the inline result of a command stays visible, in seconds.
+// Failures stay longer, so the message can be read.
+const RESULT_OK_SECONDS = 3;
+const RESULT_FAIL_SECONDS = 10;

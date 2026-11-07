@@ -50,3 +50,10 @@ function withTimeout(command, timeoutSeconds) {
 function isTimeoutExit(exitCode) {
     return exitCode === 124 || exitCode === 137;
 }
+
+// The line of stderr worth showing inline: the last non-empty one. Tools
+// like ssh print warnings first and the actual error last. "" if none.
+function errorLine(stderr) {
+    const lines = String(stderr || "").split("\n").map(l => l.trim()).filter(l => l !== "");
+    return lines.length > 0 ? lines[lines.length - 1] : "";
+}

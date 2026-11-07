@@ -97,5 +97,31 @@ Item {
                 }
             }
         }
+
+        // The error of each function whose last command failed, under the
+        // controls. Disappears together with the ✗.
+        Repeater {
+            model: Model.controlFunctions(serverRow.modelData)
+
+            delegate: PlasmaComponents3.Label {
+                required property var modelData
+
+                readonly property var result:
+                    serverRow.plasmoidItem.functionResults[Model.functionKey(serverRow.modelData, modelData)] || null
+
+                Layout.fillWidth: true
+                Layout.leftMargin: serverRow.dotSize + Kirigami.Units.largeSpacing
+                visible: result !== null && !result.ok
+                text: visible ? i18nc("@info function name: error message", "%1: %2",
+                                      serverRow.plasmoidItem.functionName(modelData),
+                                      serverRow.plasmoidItem.resultText(result))
+                    : ""
+                color: Kirigami.Theme.negativeTextColor
+                font: Kirigami.Theme.smallFont
+                wrapMode: Text.Wrap
+                maximumLineCount: 2
+                elide: Text.ElideRight
+            }
+        }
     }
 }

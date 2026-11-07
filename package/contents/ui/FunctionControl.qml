@@ -26,12 +26,27 @@ Item {
     readonly property bool running: plasmoidItem.runningFunctions[key] === true
     readonly property string unavailableReason:
         Model.unavailableReason(fn, server, plasmoidItem.serverStates[server.id] || "")
+    // See functionResults in main.qml. null when there is nothing to show.
+    readonly property var result: plasmoidItem.functionResults[key] || null
+    // Show ✓ / ✗ in place of the icon or handle. A toggle shows only ✗: on
+    // success, the switch itself moving to the new state is the feedback.
+    readonly property bool showResult: result !== null && !running
+        && (fn.type === "action" || !result.ok)
+    // Whether the control looks clickable. It stays so while its result
+    // shows, even if the function just became unavailable: after Wake, the
+    // server comes online during the ✓, and greying out the button then
+    // would look as if Wake had failed. Clicks are still ignored then.
+    readonly property bool looksEnabled: !running && (unavailableReason === "" || showResult)
     // A toggle whose state command timed out. It stays clickable, but a
     // click reads the state again instead of switching (see retryToggle()).
     readonly property bool stateUnknown: fn.type === "toggle" && fnState === "unknown"
-        && unavailableReason === "" && !running
+        && unavailableReason === "" && !running && !showResult
 
     readonly property string toolTipText: {
+        // The full error output; the line under the server shows only the end.
+        if (showResult && !result.ok && result.stderr !== "") {
+            return result.stderr.length > 500 ? result.stderr.slice(0, 500) + "…" : result.stderr;
+        }
         switch (unavailableReason) {
         case "needsOnline":
             return i18n("Available only while %1 is online", server.name);
@@ -76,19 +91,23 @@ Item {
         }
 
         // While a command runs, a spinner takes the place of the button's
-        // icon or the switch's handle. Both keep their size, so the row
-        // doesn't reflow when the spinner appears.
+        // icon or the switch's handle; afterwards the result (✓ / ✗) does.
+        // Both keep their size, so the row doesn't reflow.
         PlasmaComponents3.ToolButton {
             id: button
 
             visible: control.fn.type === "action"
-            enabled: control.unavailableReason === "" && !control.running
+            enabled: control.looksEnabled
             // An empty icon name would remove the icon and shrink the button;
             // a blank image keeps its space for the spinner.
-            icon.name: control.running ? "" : control.fn.icon
+            icon.name: control.running || control.showResult ? "" : control.fn.icon
             icon.source: Qt.resolvedUrl("../images/blank.svg")
             text: control.plasmoidItem.functionName(control.fn)
-            onClicked: control.activated(true)
+            onClicked: {
+                if (control.unavailableReason === "") {
+                    control.activated(true);
+                }
+            }
 
             PlasmaComponents3.BusyIndicator {
                 // Where the button draws its icon: flat buttons use smallMedium.
@@ -99,25 +118,36 @@ Item {
                 visible: control.running
                 running: visible
             }
+
+            ResultIcon {
+                x: button.leftPadding
+                anchors.verticalCenter: parent.verticalCenter
+                width: Kirigami.Units.iconSizes.smallMedium
+                height: width
+                result: control.showResult ? control.result : null
+            }
         }
 
         PlasmaComponents3.Switch {
             id: toggleSwitch
 
             visible: control.fn.type === "toggle"
-            enabled: control.unavailableReason === "" && !control.running
+            enabled: control.looksEnabled
             text: control.plasmoidItem.functionName(control.fn)
             checked: control.fnState === "on"
             // Fade the handle out rather than hiding it: the switch places its
             // text after a visible indicator, so `visible: false` would move it.
-            // The spinner or the warning icon below takes its place.
-            indicator.opacity: control.running || control.stateUnknown ? 0 : 1
+            // The spinner, the result or the warning icon below takes its place.
+            indicator.opacity: control.running || control.showResult || control.stateUnknown ? 0 : 1
             onToggled: {
                 const turnOn = checked;
                 // Clicking set `checked` directly, which removed the binding
                 // above. Restore it: the switch shows the real state, which
                 // is read again after the command has run.
                 checked = Qt.binding(() => control.fnState === "on");
+                if (control.unavailableReason !== "") {
+                    return; // only looks enabled, see looksEnabled
+                }
                 if (control.stateUnknown) {
                     // No confirmation: reading the state changes nothing.
                     control.plasmoidItem.retryToggle(control.server, control.fn);
@@ -142,6 +172,13 @@ Item {
                 height: width
                 source: "dialog-warning"
                 visible: control.stateUnknown
+            }
+
+            ResultIcon {
+                anchors.centerIn: toggleSwitch.indicator
+                width: toggleSwitch.indicator.height
+                height: width
+                result: control.showResult ? control.result : null
             }
         }
     }

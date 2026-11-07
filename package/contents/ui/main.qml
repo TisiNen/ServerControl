@@ -22,6 +22,10 @@ PlasmoidItem {
     property var functionStates: ({})
     // Model.functionKey() -> true while an action or toggle command runs.
     property var runningFunctions: ({})
+    // Model.functionKey() -> result of the last action or toggle command,
+    // shown inline for a few seconds: { ok, detail, verified, expiresAt, ... }.
+    // See setResult() and expireResults().
+    property var functionResults: ({})
 
     // Number of user-triggered actions in flight; drives the panel spinner.
     // Status checks don't count, or the spinner would flash on every poll.
@@ -47,6 +51,8 @@ PlasmoidItem {
     // Only the newest read of a toggle may set its state; older ones can
     // finish later and would show a stale value.
     property var _readSeq: ({})
+    // server id -> timestamp until which its status is polled faster.
+    property var _fastPollUntil: ({})
     // Bumped on every config change, so results of checks started with the
     // old config are dropped instead of overwriting fresh state.
     property int _configGeneration: 0
@@ -119,7 +125,8 @@ PlasmoidItem {
         const primary = fn === Model.statusFunction(server);
         const generation = _configGeneration;
         _checking[key] = true;
-        _nextCheck[key] = Date.now() + fn.interval * 1000;
+        const now = Date.now();
+        _nextCheck[key] = now + Model.checkInterval(fn, _fastPollUntil[server.id] || 0, now) * 1000;
         runner.run(Commands.substitute(fn.command, server), fn.timeout, result => {
             if (generation !== _configGeneration) {
                 return;
@@ -205,21 +212,81 @@ PlasmoidItem {
         actionsRunning++;
 
         // Always runs, even after a config change, so the counters stay right.
-        const finish = result => {
+        const finish = (result, verified) => {
             setRunning(key, false);
             actionsRunning--;
-            if (generation === _configGeneration) {
-                refreshServer(server);
+            if (generation !== _configGeneration) {
+                return;
             }
+            setResult(key, result, verified);
+            if (Model.changesOnlineState(fn)) {
+                startFastPoll(server);
+            }
+            refreshServer(server);
         };
         runner.run(Commands.substitute(command, server), fn.timeout, result => {
             // An action's success is decided by its verifyCommand, if set.
             if (fn.type === "action" && fn.verifyCommand !== "") {
-                runner.run(Commands.substitute(fn.verifyCommand, server), fn.timeout, finish);
+                runner.run(Commands.substitute(fn.verifyCommand, server), fn.timeout,
+                           verifyResult => finish(verifyResult, true));
             } else {
-                finish(result);
+                finish(result, false);
             }
         });
+    }
+
+    // Stores the result of a command for the inline feedback. It shows for
+    // a few seconds; the timer below calls expireResults() to remove it.
+    function setResult(key, result, verified) {
+        const ok = result.exitCode === 0;
+        const now = Date.now();
+        const next = Object.assign({}, functionResults);
+        next[key] = {
+            ok: ok,
+            detail: Commands.errorLine(result.stderr),
+            stderr: result.stderr,
+            exitCode: result.exitCode,
+            verified: verified,
+            expiresAt: now + (ok ? Model.RESULT_OK_SECONDS : Model.RESULT_FAIL_SECONDS) * 1000
+        };
+        functionResults = next;
+    }
+
+    // Removes the results whose time is up. Copies the map only if
+    // something changes, so most ticks don't touch any binding.
+    function expireResults(now) {
+        let next = null;
+        for (const key in functionResults) {
+            if (now >= functionResults[key].expiresAt) {
+                next = next || Object.assign({}, functionResults);
+                delete next[key];
+            }
+        }
+        if (next) {
+            functionResults = next;
+        }
+    }
+
+    // The inline message for a failed command.
+    function resultText(result) {
+        if (result.detail !== "") {
+            return result.detail;
+        }
+        return result.verified ? i18n("Check afterwards failed with exit code %1", result.exitCode)
+            : i18n("Failed with exit code %1", result.exitCode);
+    }
+
+    // Polls the server's status functions every few seconds for a while,
+    // e.g. after Wake, so the new state shows up quickly.
+    function startFastPoll(server) {
+        const now = Date.now();
+        _fastPollUntil[server.id] = now + Model.FAST_POLL_DURATION * 1000;
+        for (const fn of server.functions) {
+            if (fn.type === "status") {
+                const key = Model.functionKey(server, fn);
+                _nextCheck[key] = Math.min(_nextCheck[key] || 0, now + Model.checkInterval(fn, _fastPollUntil[server.id], now) * 1000);
+            }
+        }
     }
 
     toolTipMainText: i18n("Server Control")
@@ -255,10 +322,12 @@ PlasmoidItem {
         }
         serverStates = states;
         functionStates = fnStates;
+        functionResults = {};
         _configGeneration++;
         _checking = {};
         _nextCheck = {};
         _readSeq = {};
+        _fastPollUntil = {};
         for (const s of serverList) {
             refreshToggles(s);
         }
@@ -292,9 +361,9 @@ PlasmoidItem {
         id: runner
     }
 
-    // Ticks every second and starts the status checks that are due, so each
-    // status function can have its own interval (and later a faster one
-    // after Wake).
+    // Ticks every second: starts the status checks that are due, so each
+    // status function can have its own interval (and a faster one after
+    // Wake), and removes old inline results.
     Timer {
         interval: 1000
         repeat: true
@@ -302,6 +371,7 @@ PlasmoidItem {
         triggeredOnStart: true
         onTriggered: {
             const now = Date.now();
+            root.expireResults(now);
             for (const s of root.serverList) {
                 for (const fn of s.functions) {
                     if (fn.type === "status" && now >= (root._nextCheck[Model.functionKey(s, fn)] || 0)) {
