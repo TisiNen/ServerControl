@@ -134,6 +134,9 @@ Details of the implementation:
   available.
 - After an action or toggle command, all status checks and toggle states of that server are read
   again.
+- An action whose `availableWhen` is `online` or `offline` (Wake, Power off, Reboot) is expected to
+  change the online state, so it starts faster polling of that server. Actions available `always`
+  don't.
 
 ### Placeholders
 
@@ -179,10 +182,17 @@ in the settings UI.
 
 ### Feedback
 
-- Primary feedback is visual: the status dot, plus a short inline result per function
-  (✓ / ✗ and stderr on failure, fading after a few seconds).
-- After Wake or Power off, poll status faster for a while (e.g. every 5 s for 2 min) so the
-  state change shows up quickly.
+- Primary feedback is visual: the status dot, plus a short inline result per function:
+  - ✓ / ✗ replaces the button's icon, or the switch's handle, so the row doesn't reflow. Toggles
+    show only ✗: on success, the switch moving to the new state is the feedback.
+  - On failure, a line under the server's controls shows "<function>: <last line of stderr>"
+    (or the exit code if stderr is empty). The control's tooltip shows the full stderr.
+  - ✓ shows for 3 s, ✗ and the error line for 10 s, then they disappear (no fade: a fading ✓
+    overlapped the returning icon).
+  - While its result shows, a control stays enabled even if the function has just become
+    unavailable (Wake brings the server online during its ✓). Clicks are ignored then.
+- After Wake or Power off (see "Function types"), poll the server's status functions every 5 s
+  for 2 min (a shorter configured interval is kept), so the state change shows up quickly.
 
 ### Settings dialog
 
@@ -210,6 +220,7 @@ package/
         ├── FullRepresentation.qml
         ├── ServerDelegate.qml
         ├── FunctionControl.qml # one function: status indicator, action button or toggle switch
+        ├── ResultIcon.qml    # ✓ / ✗ after a command
         ├── CommandRunner.qml # wraps the executable data engine
         ├── ConfigServers.qml # settings page (KCM.SimpleKCM)
         ├── ConfigGeneral.qml
@@ -225,8 +236,8 @@ tools/
     └── load-test.sh          # builds the image if needed, runs the load test
 
 examples/
-├── demo-local.json           # every function type, harmless local commands only (/tmp)
-└── home-server.json          # a realistic server; edit host, mac, user and paths first
+├── demo-local.example.json           # every function type, harmless local commands only (/tmp)
+└── home-server.example.json          # a realistic server; edit host, mac, user and paths first
 ```
 
 ### APIs to use
@@ -256,7 +267,7 @@ kpackagetool6 -t Plasma/Applet -i package/                 # install
 kpackagetool6 -t Plasma/Applet -u package/                 # update after changes
 systemctl --user restart plasma-plasmashell                # reload the panel if needed
 journalctl --user -f | grep -i -E "qml|plasmashell"        # QML errors
-tools/set-config.sh examples/demo-local.json               # load a test config into the running widget
+tools/set-config.sh examples/demo-local.example.json               # load a test config into the running widget
 ```
 
 ### Self-testing (for Claude): load test in a Podman sandbox
@@ -329,8 +340,7 @@ Work in phases. Each phase should be usable and testable on its own.
    the test fail.
 1. **Skeleton**: package layout, metadata, compact and full representations, `CommandRunner`
    with timeout. One server hardcoded in JS, with ping status shown as a dot.
-2. **Generic model** (in progress; JSON config model, function types, placeholders and
-   confirmation dialog done): JSON config model, all three function types, placeholders,
+2. **Generic model** (done): JSON config model, all three function types, placeholders,
    confirmation dialog, inline feedback, faster polling after wake/poweroff.
 3. **Settings UI**: server and function editor, templates, JSON import/export.
 4. **Later options**:
