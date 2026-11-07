@@ -11,7 +11,7 @@
         "type": "status",
         "name": "Online",
         "command": "test -f /tmp/servercontrol-demo/online",
-        "interval": 5
+        "interval": 30
       },
       {
         "id": "web",

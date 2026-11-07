@@ -3,7 +3,7 @@
 # running Plasma session. A stand-in for the settings UI until phase 3.
 #
 # Usage: tools/set-config.sh FILE.json
-#   e.g. tools/set-config.sh examples/demo-local.json
+#   e.g. tools/set-config.sh examples/demo-local.example.json
 set -euo pipefail
 
 file=${1:?usage: tools/set-config.sh FILE.json}
