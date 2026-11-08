@@ -11,5 +11,18 @@
     <entry name="servers" type="String">
       <default>[]</default>
     </entry>
+
+    <!-- Seconds between checks, for status functions without their own
+         `interval`. -->
+    <entry name="defaultInterval" type="Int">
+      <default>30</default>
+      <min>1</min>
+    </entry>
+
+    <!-- Inserted by {ssh}: ssh <sshOptions> user@host. Same default as
+         DEFAULT_SSH_OPTIONS in code/commands.js. -->
+    <entry name="sshOptions" type="String">
+      <default>-o BatchMode=yes -o ConnectTimeout=5</default>
+    </entry>
   </group>
 </kcfg>

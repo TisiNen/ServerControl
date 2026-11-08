@@ -14,6 +14,9 @@ Kirigami.FormLayout {
     required property var server
     // The server's first status function decides its online state.
     required property bool primaryStatus
+    // From the General settings.
+    required property int defaultInterval
+    required property string sshOptions
 
     signal fieldEdited(string key, var value)
     signal typeSelected(string type)
@@ -109,6 +112,7 @@ Kirigami.FormLayout {
         Layout.fillWidth: true
         visible: editor.isStatus || editor.isAction
         server: editor.server
+        sshOptions: editor.sshOptions
         command: editor.fn.command || ""
         placeholderText: editor.isStatus ? i18n("Exit code 0 means online") : ""
         onEdited: text => editor.fieldEdited("command", text)
@@ -119,6 +123,7 @@ Kirigami.FormLayout {
         Layout.fillWidth: true
         visible: editor.isAction
         server: editor.server
+        sshOptions: editor.sshOptions
         command: editor.fn.verifyCommand || ""
         placeholderText: i18n("Optional; its exit code decides success")
         onEdited: text => editor.fieldEdited("verifyCommand", text)
@@ -129,6 +134,7 @@ Kirigami.FormLayout {
         Layout.fillWidth: true
         visible: editor.isToggle
         server: editor.server
+        sshOptions: editor.sshOptions
         command: editor.fn.stateCommand || ""
         placeholderText: i18n("Exit code 0 means on")
         onEdited: text => editor.fieldEdited("stateCommand", text)
@@ -139,6 +145,7 @@ Kirigami.FormLayout {
         Layout.fillWidth: true
         visible: editor.isToggle
         server: editor.server
+        sshOptions: editor.sshOptions
         command: editor.fn.onCommand || ""
         onEdited: text => editor.fieldEdited("onCommand", text)
     }
@@ -148,6 +155,7 @@ Kirigami.FormLayout {
         Layout.fillWidth: true
         visible: editor.isToggle
         server: editor.server
+        sshOptions: editor.sshOptions
         command: editor.fn.offCommand || ""
         onEdited: text => editor.fieldEdited("offCommand", text)
     }
@@ -188,16 +196,34 @@ Kirigami.FormLayout {
         onToggled: editor.fieldEdited("confirm", checked)
     }
 
-    QQC2.SpinBox {
+    // Without its own `interval`, a status function uses the default from
+    // the General page; the spin box then shows that value, disabled.
+    RowLayout {
         Kirigami.FormData.label: i18nc("@label:spinbox", "Check every:")
         visible: editor.isStatus
-        from: 1
-        to: 86400
-        editable: true
-        value: editor.fn.interval || 30
-        textFromValue: (value, locale) => i18ncp("@item:valuesuffix", "%1 second", "%1 seconds", value)
-        valueFromText: (text, locale) => parseInt(text) || 30
-        onValueModified: editor.fieldEdited("interval", value)
+
+        QQC2.SpinBox {
+            enabled: !useDefault.checked
+            from: 1
+            to: 86400
+            editable: true
+            value: editor.fn.interval || editor.defaultInterval
+            textFromValue: (value, locale) => i18ncp("@item:valuesuffix", "%1 second", "%1 seconds", value)
+            valueFromText: (text, locale) => parseInt(text) || editor.defaultInterval
+            onValueModified: editor.fieldEdited("interval", value)
+        }
+
+        QQC2.CheckBox {
+            id: useDefault
+
+            text: i18nc("@option:check use the default check interval", "Default")
+            checked: !(editor.fn.interval > 0)
+            onToggled: editor.fieldEdited("interval", checked ? undefined : editor.defaultInterval)
+
+            QQC2.ToolTip.text: i18n("Use the default interval from the General page")
+            QQC2.ToolTip.visible: hovered
+            QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+        }
     }
 
     QQC2.SpinBox {

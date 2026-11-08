@@ -8,4 +8,9 @@ ConfigModel {
         icon: "network-server"
         source: "ConfigServers.qml"
     }
+    ConfigCategory {
+        name: i18n("General")
+        icon: "configure"
+        source: "ConfigGeneral.qml"
+    }
 }

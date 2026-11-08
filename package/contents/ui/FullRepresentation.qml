@@ -6,8 +6,6 @@ import org.kde.plasma.components as PlasmaComponents3
 import org.kde.plasma.extras as PlasmaExtras
 import org.kde.plasma.plasmoid
 
-import "code/commands.js" as Commands
-
 PlasmaExtras.Representation {
     id: full
 
@@ -109,7 +107,7 @@ PlasmaExtras.Representation {
 
         readonly property string functionName: fn ? full.plasmoidItem.functionName(fn) : ""
         readonly property string command: !fn ? ""
-            : Commands.substitute(fn.type === "toggle" ? (turnOn ? fn.onCommand : fn.offCommand) : fn.command, server)
+            : full.plasmoidItem.commandFor(fn.type === "toggle" ? (turnOn ? fn.onCommand : fn.offCommand) : fn.command, server)
 
         function ask(server, fn, turnOn) {
             this.server = server;

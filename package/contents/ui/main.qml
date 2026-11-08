@@ -72,6 +72,12 @@ PlasmoidItem {
         }
     }
 
+    // A command with its placeholders filled in for `server`, using the
+    // SSH options from the General settings.
+    function commandFor(command, server) {
+        return Commands.substitute(command, server, Plasmoid.configuration.sshOptions);
+    }
+
     // The name shown for a function in the popup and the confirmation dialog.
     function functionName(fn) {
         return fn.name || i18n("Unnamed function");
@@ -126,8 +132,9 @@ PlasmoidItem {
         const generation = _configGeneration;
         _checking[key] = true;
         const now = Date.now();
-        _nextCheck[key] = now + Model.checkInterval(fn, _fastPollUntil[server.id] || 0, now) * 1000;
-        runner.run(Commands.substitute(fn.command, server), fn.timeout, result => {
+        _nextCheck[key] = now + Model.checkInterval(fn, Plasmoid.configuration.defaultInterval,
+                                                    _fastPollUntil[server.id] || 0, now) * 1000;
+        runner.run(commandFor(fn.command, server), fn.timeout, result => {
             if (generation !== _configGeneration) {
                 return;
             }
@@ -147,7 +154,7 @@ PlasmoidItem {
         const seq = (_readSeq[key] || 0) + 1;
         const generation = _configGeneration;
         _readSeq[key] = seq;
-        runner.run(Commands.substitute(fn.stateCommand, server), fn.timeout, result => {
+        runner.run(commandFor(fn.stateCommand, server), fn.timeout, result => {
             if (done) {
                 done();
             }
@@ -224,10 +231,10 @@ PlasmoidItem {
             }
             refreshServer(server);
         };
-        runner.run(Commands.substitute(command, server), fn.timeout, result => {
+        runner.run(commandFor(command, server), fn.timeout, result => {
             // An action's success is decided by its verifyCommand, if set.
             if (fn.type === "action" && fn.verifyCommand !== "") {
-                runner.run(Commands.substitute(fn.verifyCommand, server), fn.timeout,
+                runner.run(commandFor(fn.verifyCommand, server), fn.timeout,
                            verifyResult => finish(verifyResult, true));
             } else {
                 finish(result, false);
@@ -284,7 +291,8 @@ PlasmoidItem {
         for (const fn of server.functions) {
             if (fn.type === "status") {
                 const key = Model.functionKey(server, fn);
-                _nextCheck[key] = Math.min(_nextCheck[key] || 0, now + Model.checkInterval(fn, _fastPollUntil[server.id], now) * 1000);
+                _nextCheck[key] = Math.min(_nextCheck[key] || 0, now + Model.checkInterval(
+                    fn, Plasmoid.configuration.defaultInterval, _fastPollUntil[server.id], now) * 1000);
             }
         }
     }
@@ -340,6 +348,16 @@ PlasmoidItem {
 
         function onServersChanged() {
             root.applyConfig();
+        }
+
+        // Check everything on the next tick with the new settings, instead
+        // of waiting for checks scheduled with the old interval.
+        function onDefaultIntervalChanged() {
+            root._nextCheck = {};
+        }
+
+        function onSshOptionsChanged() {
+            root._nextCheck = {};
         }
     }
 

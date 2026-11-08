@@ -78,7 +78,13 @@ function normalizeFunction(raw, fallbackId, usedIds, warnings, where) {
     switch (fn.type) {
     case "status":
         fn.command = asString(raw.command, "");
-        fn.interval = asSeconds(raw.interval, DEFAULT_INTERVAL);
+        // Optional: without one, the default interval from the General
+        // settings applies (see statusInterval()). An invalid one is dropped.
+        if (asSeconds(raw.interval, 0) > 0) {
+            fn.interval = asSeconds(raw.interval, 0);
+        } else {
+            delete fn.interval;
+        }
         break;
     case "action":
         fn.command = asString(raw.command, "");
@@ -226,10 +232,17 @@ function changesOnlineState(fn) {
     return fn.type === "action" && (fn.availableWhen === "online" || fn.availableWhen === "offline");
 }
 
+// A status function's own interval, or `defaultInterval` (the General
+// setting) if it has none.
+function statusInterval(fn, defaultInterval) {
+    return fn.interval || asSeconds(defaultInterval, DEFAULT_INTERVAL);
+}
+
 // Seconds until a status function runs again. `fastPollUntil` is the end of
 // the server's fast-polling period (a timestamp in ms, 0 if none).
-function checkInterval(fn, fastPollUntil, now) {
-    return fastPollUntil > now ? Math.min(fn.interval, FAST_POLL_INTERVAL) : fn.interval;
+function checkInterval(fn, defaultInterval, fastPollUntil, now) {
+    const interval = statusInterval(fn, defaultInterval);
+    return fastPollUntil > now ? Math.min(interval, FAST_POLL_INTERVAL) : interval;
 }
 
 // How long the inline result of a command stays visible, in seconds.

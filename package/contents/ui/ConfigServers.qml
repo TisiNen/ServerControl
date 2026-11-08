@@ -15,9 +15,14 @@ import "code/model.js" as Model
 KCM.SimpleKCM {
     id: page
 
-    // Set by Plasma from the `servers` config key and its default.
+    // Set by Plasma from the config keys and their defaults. This page
+    // edits `servers` and reads the General settings for the editor.
     property string cfg_servers
     property string cfg_serversDefault
+    property int cfg_defaultInterval
+    property int cfg_defaultIntervalDefault
+    property string cfg_sshOptions
+    property string cfg_sshOptionsDefault
 
     property var servers: []
     // Problems found when the saved config was parsed. Saving writes the
@@ -116,9 +121,15 @@ KCM.SimpleKCM {
         currentFunctionIndex = indexAfterMove(currentFunctionIndex, index, delta);
     }
 
+    // `value` undefined removes the field, e.g. `interval` to use the default.
     function setFunctionField(key, value) {
         edit(list => {
-            list[currentServerIndex].functions[currentFunctionIndex][key] = value;
+            const fn = list[currentServerIndex].functions[currentFunctionIndex];
+            if (value === undefined) {
+                delete fn[key];
+            } else {
+                fn[key] = value;
+            }
         });
     }
 
@@ -435,6 +446,8 @@ KCM.SimpleKCM {
                     // is selected; the editor is hidden then.
                     fn: page.currentFunction || { type: "action", name: "", icon: "" }
                     server: page.currentServer || {}
+                    defaultInterval: page.cfg_defaultInterval
+                    sshOptions: page.cfg_sshOptions
                     primaryStatus: page.currentFunction !== null && page.currentFunction.id === page.primaryStatusId
                     onFieldEdited: (key, value) => page.setFunctionField(key, value)
                     onTypeSelected: type => page.setFunctionType(type)

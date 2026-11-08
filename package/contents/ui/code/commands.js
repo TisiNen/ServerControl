@@ -14,26 +14,40 @@ function shellQuote(value) {
     return "'" + s.replace(/'/g, "'\\''") + "'";
 }
 
-function sshCommand(server) {
+// Used when no SSH options are passed. Same as the default of the
+// `sshOptions` key in main.xml.
+const DEFAULT_SSH_OPTIONS = "-o BatchMode=yes -o ConnectTimeout=5";
+
+// `sshOptions` is the General setting, inserted as typed: it holds several
+// shell words, so it isn't quoted. "" means plain `ssh user@host`.
+function sshCommand(server, sshOptions) {
     const host = server.host || "";
     const target = server.user ? server.user + "@" + host : host;
-    return "ssh -o BatchMode=yes -o ConnectTimeout=5 " + shellQuote(target);
+    const options = typeof sshOptions === "string" ? sshOptions.trim() : DEFAULT_SSH_OPTIONS;
+    return ["ssh", options, shellQuote(target)].filter(part => part !== "").join(" ");
 }
 
-function placeholderValues(server) {
+// Without BatchMode, ssh asks for a password when key login fails, and the
+// command hangs until its timeout. The settings warn about that.
+function hasBatchMode(sshOptions) {
+    return /batchmode[\s=]+yes/i.test(String(sshOptions || ""));
+}
+
+function placeholderValues(server, sshOptions) {
     return {
         host: shellQuote(server.host),
         mac: shellQuote(server.mac),
         user: shellQuote(server.user),
         name: shellQuote(server.name),
-        ssh: sshCommand(server)
+        ssh: sshCommand(server, sshOptions)
     };
 }
 
 // Replaces known {placeholders} with shell-quoted values from the server.
-// Unknown placeholders are left as they are.
-function substitute(command, server) {
-    const values = placeholderValues(server);
+// Unknown placeholders are left as they are. `sshOptions` is the General
+// setting for {ssh}.
+function substitute(command, server, sshOptions) {
+    const values = placeholderValues(server, sshOptions);
     return String(command || "").replace(/\{(\w+)\}/g, function (match, key) {
         return Object.prototype.hasOwnProperty.call(values, key) ? values[key] : match;
     });

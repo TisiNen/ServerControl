@@ -13,6 +13,8 @@ ColumnLayout {
 
     required property var server
     required property string command
+    // The General setting {ssh} uses.
+    property string sshOptions: Commands.DEFAULT_SSH_OPTIONS
     property string placeholderText: ""
 
     // Emitted on every keystroke with the new text.
@@ -39,7 +41,7 @@ ColumnLayout {
         // Wrapped labels report their unwrapped width as implicit width,
         // which would widen the whole form; fillWidth gives them the rest.
         Layout.preferredWidth: Kirigami.Units.gridUnit * 10
-        text: Commands.substitute(field.command, field.server)
+        text: Commands.substitute(field.command, field.server, field.sshOptions)
         font: Kirigami.Theme.fixedWidthFont
         opacity: 0.7
         wrapMode: Text.WrapAnywhere
