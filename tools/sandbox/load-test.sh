@@ -9,6 +9,9 @@
 #   --self-test     check that the test catches a deliberately broken QML file
 #   --servers FILE  preset the `servers` config key from a JSON file
 #                   (use only harmless commands: true, false, echo, sleep)
+#   --page NAME     load the settings page contents/ui/NAME.qml instead of the
+#                   widget, and click through it (see page-harness.qml)
+#   --screenshots DIR  with --page: save a PNG of each step into DIR
 #   package-dir     defaults to ./package in the repository root
 set -euo pipefail
 
@@ -22,6 +25,8 @@ dump_config=0
 rebuild=0
 self_test=0
 servers_file=
+page=
+screenshots=
 package=$REPO_DIR/package
 
 while [[ $# -gt 0 ]]; do
@@ -31,7 +36,9 @@ while [[ $# -gt 0 ]]; do
         --rebuild) rebuild=1 ;;
         --self-test) self_test=1 ;;
         --servers) servers_file=$(realpath "${2:?--servers needs a file}"); shift ;;
-        -h|--help) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        --page) page=${2:?--page needs a name}; shift ;;
+        --screenshots) screenshots=${2:?--screenshots needs a directory}; shift ;;
+        -h|--help) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         -*) echo "Unknown option: $1" >&2; exit 2 ;;
         *) package=$1 ;;
     esac
@@ -50,16 +57,22 @@ fi
 "$ENGINE" build "${build_args[@]}" "$SANDBOX_DIR" >/dev/null
 
 run_test() {
+    local out_mount=()
+    if [[ -n $screenshots ]]; then
+        mkdir -p "$screenshots"
+        out_mount=(-v "$(realpath "$screenshots"):/out:Z")
+    fi
     # keep-id maps the host user to the container user, so the package is
     # readable even when its directory is private (e.g. mktemp -d).
     "$ENGINE" run --rm --network none --userns=keep-id \
         -e VERBOSE="$verbose" -e DUMP_CONFIG="$dump_config" \
-        -v "$1:/package:ro,Z" \
+        -v "$1:/package:ro,Z" "${out_mount[@]}" \
         "$IMAGE"
 }
 
-# Copies the package to a temp dir. The caller removes it.
+# Copies the package to a temp dir (once). The caller removes it.
 copy_package() {
+    [[ -n ${tmp:-} ]] && return
     tmp=$(mktemp -d)
     trap 'rm -rf "$tmp"' EXIT
     cp -r "$package/." "$tmp/"
@@ -84,6 +97,19 @@ if old not in xml:
     sys.exit("main.xml: servers default not found")
 open(path, "w").write(xml.replace(old, old.replace("[]", escape(servers))))
 PY
+    package=$tmp
+fi
+
+# A settings page never opens in plasmoidviewer, so the harness replaces
+# main.qml with a widget that shows the page and clicks through it.
+if [[ -n $page ]]; then
+    if [[ ! -f $package/contents/ui/$page.qml ]]; then
+        echo "No such page: contents/ui/$page.qml" >&2
+        exit 2
+    fi
+    copy_package
+    sed -e "s/@PAGE@/$page/" -e "s/@SCREENSHOTS@/$([[ -n $screenshots ]] && echo true || echo false)/" \
+        "$SANDBOX_DIR/page-harness.qml" >"$tmp/contents/ui/main.qml"
     package=$tmp
 fi
 
