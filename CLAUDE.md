@@ -169,6 +169,19 @@ in the settings UI. The settings also flag known placeholders whose server field
 - **Flag toggle**: asks for a path, generates `test -f` / `touch` / `rm -f`
 - **Custom**: empty
 
+Implementation (`code/templates.js`, menu and dialog in `ConfigServers.qml`):
+
+- Templates list only the fields that differ from the defaults; `normalizeFunction()` fills
+  in the rest (timeout 10, no `interval`, so the default check interval applies). Default names
+  are translated in QML: Online, Wake, Power off, Reboot, New function.
+- Icons: `network-connect`, `system-run`, `system-shutdown`, `system-reboot`, `flag`; Custom
+  gets the action default.
+- Custom is an empty action. Its type can be changed in the editor.
+- Flag toggle: a dialog asks for the absolute path of the file on the server and an optional
+  name (default: the file name). The commands are `{ssh} test -f <path>`, `{ssh} touch <path>`
+  and `{ssh} rm -f <path>`, available online. The path is shell-quoted twice, because the local
+  shell and the server's shell both parse `{ssh}` commands; a plain path stays unquoted.
+
 ## UI
 
 ### Compact representation (panel)
@@ -210,7 +223,6 @@ in the settings UI. The settings also flag known placeholders whose server field
     Apply enables; Cancel discards. The page parses the saved config with `parseServers()`. If
     that produced warnings, an inline message says that invalid entries are fixed or left out
     when applied.
-  - Until the templates exist, "Add function" offers the three types with default values.
   - The function editor shows the fields of the function's type. Changing the type keeps name,
     icon, timeout, unknown fields and the fields both types share; fields only the old type
     used are dropped (`changeFunctionType()` in `model.js`).
@@ -268,7 +280,7 @@ package/
         ├── ConfigGeneral.qml # settings page: default check interval, SSH options
         └── code/
             ├── model.js      # parse/validate/serialize config JSON
-            ├── templates.js  # preconfigured functions (planned)
+            ├── templates.js  # preconfigured functions for "Add Function"
             └── commands.js   # placeholder substitution and quoting
 
 tools/
@@ -366,9 +378,11 @@ Rules:
   and `tools/sandbox/load-test.sh --page ConfigGeneral`.
   `tools/sandbox/page-harness.qml` replaces `main.qml` in a copy of the package, loads the page
   with a `cfg_` property for every config key (as Plasma does), and calls its edit functions
-  step by step (select each function, click "Choose…" for the icon, add, set and clear an
-  interval, change type, move, remove; on the General page, set the SSH options and the
-  interval, export, click "Copy", and import valid and invalid setups). Buttons the harness clicks have an `objectName`; it finds them with `findItem()`. Add `--screenshots DIR` to save a PNG per step and look at them.
+  step by step (select each function, click "Choose…" for the icon, add a server, add every
+  template, open the flag dialog, set and clear an interval, change type, move, remove; on the
+  General page, set the SSH options and the interval, export, click "Copy", and import valid
+  and invalid setups). Buttons the harness clicks have an `objectName`; it finds them with
+  `findItem()`. Add `--screenshots DIR` to save a PNG per step and look at them.
   When a page's edit functions change, update the steps in the harness.
 - `console.log` output is filtered in the sandbox; use `console.warn` for temporary debug output,
   and remove it afterwards.
@@ -396,11 +410,11 @@ Work in phases. Each phase should be usable and testable on its own.
    with timeout. One server hardcoded in JS, with ping status shown as a dot.
 2. **Generic model** (done): JSON config model, all three function types, placeholders,
    confirmation dialog, inline feedback, faster polling after wake/poweroff.
-3. **Settings UI** (in progress):
+3. **Settings UI** (done):
    - Server and function editor (done)
    - General page: default check interval and SSH options (done)
    - JSON import/export (done)
-   - Templates
+   - Templates (done)
 4. **Later options**:
    - Panel mode: one icon for all servers vs. one dot per server in the compact view, plus a
      per-instance "show only these servers" filter.

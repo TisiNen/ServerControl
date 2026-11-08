@@ -295,11 +295,6 @@ function newServer(name, servers) {
     return { id: newId("server", servers), name: name, host: "", mac: "", user: "", functions: [] };
 }
 
-// A function of `type` with default values.
-function newFunction(type, name, servers) {
-    return normalizeFunction({ type: type, name: name }, newId("fn", servers), {}, [], "new function");
-}
-
 // A copy of `fn` as another type. Name, icon, timeout and the fields both
 // types share (e.g. `command` from status to action) are kept; fields the
 // new type doesn't use are dropped. A default icon follows the new type.

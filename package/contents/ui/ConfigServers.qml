@@ -5,6 +5,7 @@ import org.kde.kirigami as Kirigami
 import org.kde.kcmutils as KCM
 
 import "code/model.js" as Model
+import "code/templates.js" as Templates
 
 // Settings page "Servers": the server list on the left, the selected
 // server's fields and functions on the right.
@@ -100,9 +101,35 @@ KCM.SimpleKCM {
         });
     }
 
-    function addFunction(type) {
-        edit(list => list[currentServerIndex].functions.push(Model.newFunction(type, i18n("New function"), list)));
+    // Adds a function from a template in templates.js and selects it.
+    function addFunction(templateId) {
+        const names = {
+            ping: i18nc("default name of a ping status check", "Online"),
+            wake: i18nc("default name of a Wake-on-LAN action", "Wake"),
+            poweroff: i18nc("default name of a power off action", "Power off"),
+            reboot: i18nc("default name of a reboot action", "Reboot"),
+            custom: i18n("New function")
+        };
+        edit(list => list[currentServerIndex].functions.push(
+            Templates.fromTemplate(templateId, names[templateId], list)));
         currentFunctionIndex = currentServer.functions.length - 1;
+    }
+
+    // Adds a flag toggle for the file at `path` on the server. Without a
+    // name, the file name is used.
+    function addFlagToggle(path, name) {
+        const fnName = name.trim() || Templates.flagName(path) || i18n("Flag");
+        edit(list => list[currentServerIndex].functions.push(
+            Templates.flagToggle(path.trim(), fnName, list)));
+        currentFunctionIndex = currentServer.functions.length - 1;
+    }
+
+    // Opens the dialog that asks for the flag file's path.
+    function askFlagPath() {
+        flagPath.text = "";
+        flagName.text = "";
+        flagDialog.open();
+        flagPath.forceActiveFocus();
     }
 
     function removeFunction(index) {
@@ -420,19 +447,95 @@ KCM.SimpleKCM {
                             id: addFunctionMenu
 
                             QQC2.MenuItem {
-                                text: i18n("Status check")
+                                text: i18n("Status (ping)")
                                 icon.name: "network-connect"
-                                onTriggered: page.addFunction("status")
+                                onTriggered: page.addFunction("ping")
                             }
                             QQC2.MenuItem {
-                                text: i18n("Action (a button)")
+                                text: i18n("Wake-on-LAN")
                                 icon.name: "system-run"
-                                onTriggered: page.addFunction("action")
+                                onTriggered: page.addFunction("wake")
                             }
                             QQC2.MenuItem {
-                                text: i18n("Toggle (an on/off switch)")
-                                icon.name: "system-run"
-                                onTriggered: page.addFunction("toggle")
+                                text: i18n("Power off")
+                                icon.name: "system-shutdown"
+                                onTriggered: page.addFunction("poweroff")
+                            }
+                            QQC2.MenuItem {
+                                text: i18n("Reboot")
+                                icon.name: "system-reboot"
+                                onTriggered: page.addFunction("reboot")
+                            }
+                            QQC2.MenuItem {
+                                text: i18n("Flag toggle…")
+                                icon.name: "flag"
+                                onTriggered: page.askFlagPath()
+                            }
+                            QQC2.MenuSeparator {}
+                            QQC2.MenuItem {
+                                text: i18nc("an empty function", "Custom")
+                                icon.name: "document-new"
+                                onTriggered: page.addFunction("custom")
+                            }
+                        }
+
+                        // Asks for the flag file of a new flag toggle.
+                        Kirigami.Dialog {
+                            id: flagDialog
+
+                            readonly property bool valid: flagPath.text.trim() !== ""
+
+                            function add() {
+                                if (valid) {
+                                    page.addFlagToggle(flagPath.text, flagName.text);
+                                    close();
+                                }
+                            }
+
+                            title: i18nc("@title:window", "Add Flag Toggle")
+                            padding: Kirigami.Units.largeSpacing
+                            preferredWidth: Kirigami.Units.gridUnit * 24
+                            standardButtons: QQC2.Dialog.Cancel
+                            customFooterActions: [
+                                Kirigami.Action {
+                                    icon.name: "list-add"
+                                    text: i18nc("@action:button", "Add")
+                                    enabled: flagDialog.valid
+                                    onTriggered: flagDialog.add()
+                                }
+                            ]
+
+                            ColumnLayout {
+                                spacing: Kirigami.Units.largeSpacing
+
+                                QQC2.Label {
+                                    Layout.fillWidth: true
+                                    text: i18n("A switch that is on while a file exists on the server. Turning it on creates the file with touch, turning it off removes it. The commands run over {ssh}.")
+                                    wrapMode: Text.Wrap
+                                }
+
+                                Kirigami.FormLayout {
+                                    Layout.fillWidth: true
+
+                                    QQC2.TextField {
+                                        id: flagPath
+
+                                        Kirigami.FormData.label: i18nc("@label:textbox", "File on the server:")
+                                        Layout.fillWidth: true
+                                        placeholderText: i18n("Absolute path, e.g. /var/lib/nightly/skip-alarm")
+                                        font: Kirigami.Theme.fixedWidthFont
+                                        onAccepted: flagDialog.add()
+                                    }
+
+                                    QQC2.TextField {
+                                        id: flagName
+
+                                        Kirigami.FormData.label: i18nc("@label:textbox", "Name:")
+                                        Layout.fillWidth: true
+                                        placeholderText: Templates.flagName(flagPath.text) || i18n("The file name if empty")
+                                        onAccepted: flagDialog.add()
+                                    }
+                                }
                             }
                         }
                     }

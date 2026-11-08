@@ -4,7 +4,7 @@ Nov 4, 2026 · @Tilo
 
 ## How to read this guide
 
-This guide teaches QML using only the Server Control widget as it stands after the third step of phase 3 (on top of phase 2's config model, function types, confirmation dialog and inline feedback: the settings pages "Servers" and "General", with import and export of the whole setup): 16 source files, about 2530 lines. Read Part 1 first, then follow a status check and a click through the code in Part 3; the per-file notes in Part 4 are for looking things up.
+This guide teaches QML using only the Server Control widget as it stands after phase 3 (on top of phase 2's config model, function types, confirmation dialog and inline feedback: the settings pages "Servers" and "General", with function templates and import and export of the whole setup): 17 source files, about 2710 lines. Read Part 1 first, then follow a status check and a click through the code in Part 3; the per-file notes in Part 4 are for looking things up.
 
 | File | Lines | Language | What it is |
 | --- | --- | --- | --- |
@@ -18,18 +18,19 @@ This guide teaches QML using only the Server Control widget as it stands after t
 | `package/contents/ui/ServerDelegate.qml` | 127 | QML | One server in the popup list: dot, name, state, its functions and their errors |
 | `package/contents/ui/FunctionControl.qml` | 198 | QML | One function: status indicator, action button or toggle switch |
 | `package/contents/ui/ResultIcon.qml` | 14 | QML | The ✓ or ✗ shown after a command |
-| `package/contents/ui/ConfigServers.qml` | 458 | QML | Settings page "Servers": server list, server fields, function list |
+| `package/contents/ui/ConfigServers.qml` | 561 | QML | Settings page "Servers": server list, server fields, function list |
 | `package/contents/ui/FunctionEditor.qml` | 240 | QML | Settings form for one function, with fields per type |
 | `package/contents/ui/ConfigGeneral.qml` | 209 | QML | Settings page "General": default check interval, SSH options, import and export |
 | `package/contents/ui/CommandField.qml` | 70 | QML | Settings field for one command, with preview and placeholder warnings |
-| `package/contents/ui/code/model.js` | 413 | JavaScript | Parses and validates the `servers` config JSON; availability and polling rules; editing helpers; import and export |
+| `package/contents/ui/code/model.js` | 408 | JavaScript | Parses and validates the `servers` config JSON; availability and polling rules; editing helpers; import and export |
+| `package/contents/ui/code/templates.js` | 75 | JavaScript | The preconfigured functions for "Add Function" |
 | `package/contents/ui/code/commands.js` | 105 | JavaScript | Placeholder substitution, shell quoting, timeout wrapping, error lines, placeholder checks |
 
 If you know JavaScript, you already know half of QML: everything inside `function`, `{ … }` property expressions and `on…` handlers is ordinary JavaScript. The new part is the declarative layer around it, which Part 1 covers.
 
 ## Part 1: QML basics
 
-A QML file describes a tree of objects and how their properties depend on each other; the engine keeps those dependencies up to date for you. The twenty-one ideas below explain almost every line in this repo.
+A QML file describes a tree of objects and how their properties depend on each other; the engine keeps those dependencies up to date for you. The twenty-two ideas below explain almost every line in this repo.
 
 ### 1. A file is a tree of objects
 
@@ -162,6 +163,16 @@ A property written `TypeName.property` belongs to another type but is set on thi
 ### 12. JavaScript files
 
 `.pragma library` at the top of a JS file means it is loaded once and shared by every QML file that imports it. Such a file has no access to QML objects, only to what you pass into its functions. That keeps `model.js` and `commands.js` as pure helpers.
+
+A JS file can use another one with `.import`, the JS version of a QML `import`. `templates.js` starts with:
+
+```js
+.pragma library
+.import "model.js" as Model
+.import "commands.js" as Commands
+```
+
+and then calls `Model.normalizeFunction()` and `Commands.shellQuote()` like a QML file would.
 
 ### 13. Reacting to another object's signals: Connections, Component.onCompleted
 
@@ -305,6 +316,35 @@ component ListToolButton: QQC2.ToolButton {
 ```
 
 and then writes `ListToolButton { icon.name: "go-up"; … }` six times. Compare `Component { … }` \[14\], which declares a template *object*, not a type.
+
+### 22. Dialogs with your own content: Kirigami.Dialog
+
+`Kirigami.PromptDialog` \[19\] shows a text. When a dialog needs input fields, `Kirigami.Dialog` takes any content as its child. The flag toggle dialog in `ConfigServers.qml` holds a label and a small form:
+
+```qml
+Kirigami.Dialog {
+    id: flagDialog
+
+    readonly property bool valid: flagPath.text.trim() !== ""
+
+    title: i18nc("@title:window", "Add Flag Toggle")
+    standardButtons: QQC2.Dialog.Cancel
+    customFooterActions: [
+        Kirigami.Action {
+            text: i18nc("@action:button", "Add")
+            enabled: flagDialog.valid
+            onTriggered: flagDialog.add()
+        }
+    ]
+
+    ColumnLayout {
+        QQC2.Label { … }
+        Kirigami.FormLayout { QQC2.TextField { id: flagPath; … } … }
+    }
+}
+```
+
+A standard OK button can't be disabled with a binding. A `Kirigami.Action` in `customFooterActions` can, so "Add" stays disabled while the path is empty. Pressing Enter in a field (`onAccepted`) calls the same `add()`.
 
 ## Part 2: The Plasma-specific parts
 
@@ -583,18 +623,19 @@ The "General" settings page: settings that apply to all servers, and import and 
 
 The "Servers" settings page. It edits a parsed copy of the config and writes it back as JSON to `cfg_servers` on every change (Part 2).
 
-- **Lines 18-25, `cfg_` properties:** set by Plasma; see Part 2. The page edits `cfg_servers` and only reads `cfg_defaultInterval` and `cfg_sshOptions`, to pass them to the function editor.
-- **Lines 27-35, page state:** `servers` is the list being edited, parsed with the same `Model.parseServers()` as the widget, so the page sees exactly what the popup shows. The selection is two indexes; `currentServer` and `currentFunction` are bindings on them \[4\], `null` when nothing is selected.
-- **Lines 39-55, `load()` and `_written`:** `load()` parses `cfg_servers`, at start and whenever `cfg_servers` changes from *outside*, e.g. through the Defaults button. The page's own writes change `cfg_servers` too; `_written` holds the last JSON the page wrote, so `onCfg_serversChanged` can tell the two apart.
-- **Lines 57-63, `edit(change)`:** every change goes through here. It copies the list (`Model.copyServers()`), lets the arrow function passed as `change` modify the copy, then assigns the copy to `servers` and its JSON to `cfg_servers`. The same copy-and-assign pattern as in `main.qml` \[4\]: mutating `servers` in place would not update any binding.
-- **Lines 65-141, edit functions:** one per button or field: add, remove and move servers and functions, set a field, change a function's type. After a move or remove, they fix the selection so it stays on the same item (`indexAfterMove()`). They are small on purpose; the rules live in `model.js`.
-- **Lines 158-162, `primaryStatusId`:** the id of the current server's first status function. The function list labels that one "Online/Server state" instead of "Status", because it is the server's dot in the popup, not a control. Compared by id, not by object: a JS array used as a Repeater model may hand its delegates copies of the objects.
-- **Lines 165-170, `ListToolButton`:** an inline type \[21\].
-- **Lines 175-182, `InlineMessage`:** shown when parsing the saved config skipped or fixed something. Applying writes the cleaned-up list, so the message says so.
-- **Lines 188-267, server list:** a `Repeater` \[15\] of `ItemDelegate`s, standard clickable list rows; `highlighted` marks the selected one. Below it Add, Move up, Move down and Remove.
-- **Lines 269-282, `PlaceholderMessage`:** instead of the form while there are no servers.
-- **Lines 284-439, server form:** a `Kirigami.FormLayout` \[20\] with the server fields, then the "Functions" section. Each function row is an `ItemDelegate` whose `contentItem` is replaced by a `RowLayout` with icon, name, type and three tool buttons. "Add Function" opens a `QQC2.Menu` with the three types; `popup(button, 0, height)` places it under the button.
-- **Lines 441-456, `FunctionEditor`:** the form for the selected function. While nothing is selected it is hidden and gets a dummy `fn`, so its bindings never read from `null`. Its signals call `setFunctionField()` and `setFunctionType()`.
+- **Lines 19-26, `cfg_` properties:** set by Plasma; see Part 2. The page edits `cfg_servers` and only reads `cfg_defaultInterval` and `cfg_sshOptions`, to pass them to the function editor.
+- **Lines 28-36, page state:** `servers` is the list being edited, parsed with the same `Model.parseServers()` as the widget, so the page sees exactly what the popup shows. The selection is two indexes; `currentServer` and `currentFunction` are bindings on them \[4\], `null` when nothing is selected.
+- **Lines 40-56, `load()` and `_written`:** `load()` parses `cfg_servers`, at start and whenever `cfg_servers` changes from *outside*, e.g. through the Defaults button. The page's own writes change `cfg_servers` too; `_written` holds the last JSON the page wrote, so `onCfg_serversChanged` can tell the two apart.
+- **Lines 58-64, `edit(change)`:** every change goes through here. It copies the list (`Model.copyServers()`), lets the arrow function passed as `change` modify the copy, then assigns the copy to `servers` and its JSON to `cfg_servers`. The same copy-and-assign pattern as in `main.qml` \[4\]: mutating `servers` in place would not update any binding.
+- **Lines 66-168, edit functions:** one per button or field: add, remove and move servers and functions, set a field, change a function's type. `addFunction(templateId)` adds a function from `templates.js`, with a translated default name it passes in. `addFlagToggle()` adds a flag toggle, named after the file if no name was given; `askFlagPath()` opens the dialog that asks for the file. After a move or remove, they fix the selection so it stays on the same item (`indexAfterMove()`). They are small on purpose; the rules live in `model.js`.
+- **Lines 185-189, `primaryStatusId`:** the id of the current server's first status function. The function list labels that one "Online/Server state" instead of "Status", because it is the server's dot in the popup, not a control. Compared by id, not by object: a JS array used as a Repeater model may hand its delegates copies of the objects.
+- **Lines 192-197, `ListToolButton`:** an inline type \[21\].
+- **Lines 202-209, `InlineMessage`:** shown when parsing the saved config skipped or fixed something. Applying writes the cleaned-up list, so the message says so.
+- **Lines 215-294, server list:** a `Repeater` \[15\] of `ItemDelegate`s, standard clickable list rows; `highlighted` marks the selected one. Below it Add, Move up, Move down and Remove.
+- **Lines 296-309, `PlaceholderMessage`:** instead of the form while there are no servers.
+- **Lines 311-542, server form:** a `Kirigami.FormLayout` \[20\] with the server fields, then the "Functions" section. Each function row is an `ItemDelegate` whose `contentItem` is replaced by a `RowLayout` with icon, name, type and three tool buttons. "Add Function" opens a `QQC2.Menu` with the templates; `popup(button, 0, height)` places it under the button. A `MenuSeparator` sets "Custom", an empty action, apart.
+- **Lines 483-541, `flagDialog`:** a `Kirigami.Dialog` \[22\] asking for the path of the flag file and an optional name. The name field's placeholder shows the name that will be used if it stays empty (`Templates.flagName()`).
+- **Lines 544-557, `FunctionEditor`:** the form for the selected function. While nothing is selected it is hidden and gets a dummy `fn`, so its bindings never read from `null`. Its signals call `setFunctionField()` and `setFunctionType()`.
 
 ### FunctionEditor.qml
 
@@ -629,7 +670,15 @@ Pure data helpers, no QML \[12\]. Turns the `servers` config string into objects
 - **`checkInterval(fn, defaultInterval, fastPollUntil, now)`:** `statusInterval()`, or 5 s (`FAST_POLL_INTERVAL`) while the fast period lasts. A function whose interval is already shorter keeps it.
 - **Constants:** `FAST_POLL_DURATION` (120 s), `RESULT_OK_SECONDS` (3), and `RESULT_FAIL_SECONDS` (10). QML reads them like functions, e.g. `Model.RESULT_OK_SECONDS`.
 - **`exportSetup(servers, general)` and `parseSetup(text)`** (used by `ConfigGeneral.qml`): the import and export format `{ "version": 1, "general": {…}, "servers": […] }`. `exportSetup()` is `JSON.stringify` with an indent of 2, so the text is readable. `parseSetup()` never throws. It accepts the full format or a bare server list, and returns an error code (`"invalidJson"`, `"unsupportedVersion"`, `"noServerList"`) for the page to translate, like `unavailableReason()`. Server entries go through `parseServers()`, so an import is checked exactly like the config. `parseGeneral()` keeps only the known settings with valid values and warns about the rest.
-- **Editing helpers** (used by `ConfigServers.qml`): `copyServers()` makes a deep copy through JSON. `newId()` makes a random id like `fn-k3j9x0ab` that isn't used yet. `newServer()` and `newFunction()` create entries with defaults; their names come from the caller, because `i18n()` doesn't exist here. `changeFunctionType()` keeps name, icon, timeout, unknown fields and the fields both types share (`command` from status to action; `availableWhen` and `confirm` from action to toggle), drops the fields only the old type used, and fills in the new type's defaults through `normalizeFunction()`. `moveItem()` moves one entry of an array in place.
+- **Editing helpers** (used by `ConfigServers.qml`): `copyServers()` makes a deep copy through JSON. `newId()` makes a random id like `fn-k3j9x0ab` that isn't used yet. `newServer()` creates an empty server; its name comes from the caller, because `i18n()` doesn't exist here. New functions come from `templates.js`. `changeFunctionType()` keeps name, icon, timeout, unknown fields and the fields both types share (`command` from status to action; `availableWhen` and `confirm` from action to toggle), drops the fields only the old type used, and fills in the new type's defaults through `normalizeFunction()`. `moveItem()` moves one entry of an array in place.
+
+### code/templates.js
+
+The functions "Add Function" offers \[12\].
+
+- **`TEMPLATES`:** one entry per template, with only the fields that differ from the defaults. `fromTemplate()` adds the name and passes the result through `Model.normalizeFunction()`, which fills in the rest: timeout 10, `availableWhen` `"always"`, empty commands, and no `interval`, so a new ping uses the default check interval. "Custom" is an empty action; its type can be changed in the editor.
+- **`flagToggle(path, name, servers)`:** builds the three commands `{ssh} test -f`, `{ssh} touch` and `{ssh} rm -f` for the file. The path is shell-quoted *twice*: two shells read a `{ssh}` command. The local shell removes the outer quotes, ssh joins the words into one string, and the server's shell splits that again. With quotes removed only once, `/tmp/my flags/x` would arrive as two words. A plain path has no characters that need quoting, so it stays readable.
+- **`flagName(path)`:** the last part of the path, used as the default name.
 
 ### code/commands.js
 
@@ -654,7 +703,7 @@ The automatic load test, written in Bash, not QML.
 
 - **`Containerfile`:** a Fedora 44 image with the Plasma 6 packages, `plasmoidviewer`, a virtual X screen (`Xvfb`) and dbus.
 - **`entrypoint.sh`:** runs inside the container. Starts Xvfb, runs `plasmoidviewer` on the mounted package for 15 s, then searches the log for lines that mention `/package/` or applet load errors. Fails if it finds any, or if `plasmoidviewer` quit early.
-- **`page-harness.qml`:** used by `load-test.sh --page NAME`. `plasmoidviewer` never opens the settings dialog, so a broken settings page would pass the normal test. The harness replaces `main.qml` in a copy of the package with a widget that loads the page with a `Loader`, sets a `cfg_` property for every config key like Plasma does, and then calls the page's edit functions one per timer tick: select every function, add a server and functions, set and clear an interval, change a type, move and remove. For the General page, it sets the SSH options and the interval, exports, clicks "Copy", and imports a bare list, a full setup and three broken texts. Errors on the way show up in the report. With `--screenshots DIR`, `grabToImage()` saves a PNG after each step.
+- **`page-harness.qml`:** used by `load-test.sh --page NAME`. `plasmoidviewer` never opens the settings dialog, so a broken settings page would pass the normal test. The harness replaces `main.qml` in a copy of the package with a widget that loads the page with a `Loader`, sets a `cfg_` property for every config key like Plasma does, and then calls the page's edit functions one per timer tick: select every function, add a server and functions, set and clear an interval, change a type, move and remove. For the General page, it sets the SSH options and the interval, exports, clicks "Copy", and imports a bare list, a full setup and three broken texts. On the Servers page it adds every template and opens the flag dialog; it can't type into the dialog, so it adds a flag toggle directly. Errors on the way show up in the report. With `--screenshots DIR`, `grabToImage()` saves a PNG after each step.
 - **`load-test.sh`:** runs on your machine. Builds the image if needed and starts the container with `--network none` and the package mounted read-only. `--self-test` swaps in a broken `main.qml` to prove the test catches errors. `--servers FILE` loads the widget with a test config: `plasmoidviewer` throws away a preset applet config, so the script copies the package and puts the file's content in as the default of the `servers` key in `main.xml`.
 
 ## Glossary and further reading

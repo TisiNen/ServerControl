@@ -113,14 +113,21 @@ PlasmoidItem {
                 button.clicked();
             }]);
             steps.push(["add-server", () => page.addServer()]);
-            steps.push(["add-status", () => {
+            steps.push(["add-ping", () => {
                 page.setServerField("host", "example.invalid");
-                page.addFunction("status");
+                page.addFunction("ping");
             }]);
             steps.push(["interval-own", () => page.setFunctionField("interval", 45)]);
             steps.push(["interval-default", () => page.setFunctionField("interval", undefined)]);
-            steps.push(["add-action", () => page.addFunction("action")]);
-            steps.push(["add-toggle", () => page.addFunction("toggle")]);
+            steps.push(["add-templates", () => {
+                for (const id of ["wake", "poweroff", "reboot", "custom"]) {
+                    page.addFunction(id);
+                }
+            }]);
+            // Opens the dialog, then adds directly: the test can't type
+            // into it. Screenshots don't show dialogs.
+            steps.push(["flag-dialog", () => page.askFlagPath()]);
+            steps.push(["add-flag", () => page.addFlagToggle("/tmp/my flags/skip-alarm", "")]);
             steps.push(["placeholders", () => page.setFunctionField("stateCommand", "{ssh} test -f {path} && wol {mac}")]);
             steps.push(["type-to-action", () => page.setFunctionType("action")]);
             steps.push(["move-remove", () => {
