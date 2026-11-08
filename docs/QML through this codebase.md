@@ -4,27 +4,31 @@ Nov 4, 2026 · @Tilo
 
 ## How to read this guide
 
-This guide teaches QML using only the Server Control widget as it stands after phase 2 (the JSON config model, all three function types, the confirmation dialog, inline feedback and faster polling after Wake): 10 source files, about 1280 lines. Read Part 1 first, then follow a status check and a click through the code in Part 3; the per-file notes in Part 4 are for looking things up.
+This guide teaches QML using only the Server Control widget as it stands after the first step of phase 3 (on top of phase 2's config model, function types, confirmation dialog and inline feedback: a settings page to edit servers and functions): 15 source files, about 2140 lines. Read Part 1 first, then follow a status check and a click through the code in Part 3; the per-file notes in Part 4 are for looking things up.
 
 | File | Lines | Language | What it is |
 | --- | --- | --- | --- |
 | `package/metadata.json` | 18 | JSON | Tells Plasma this folder is a widget: name, icon, plugin ID |
 | `package/contents/config/main.xml` | 15 | XML | The config schema: one `servers` key holding JSON |
+| `package/contents/config/config.qml` | 11 | QML | The list of pages in the settings dialog |
 | `package/contents/ui/main.qml` | 384 | QML | The root of the widget: config, state, timer, running all commands |
 | `package/contents/ui/CommandRunner.qml` | 52 | QML | Runs shell commands in the background and calls you back |
 | `package/contents/ui/CompactRepresentation.qml` | 55 | QML | The panel icon with its coloured dot and spinner |
-| `package/contents/ui/FullRepresentation.qml` | 124 | QML | The popup: heading, refresh button, config warning, server list, confirmation dialog |
+| `package/contents/ui/FullRepresentation.qml` | 131 | QML | The popup: heading, refresh button, config warning, server list, confirmation dialog |
 | `package/contents/ui/ServerDelegate.qml` | 127 | QML | One server in the popup list: dot, name, state, its functions and their errors |
 | `package/contents/ui/FunctionControl.qml` | 198 | QML | One function: status indicator, action button or toggle switch |
 | `package/contents/ui/ResultIcon.qml` | 14 | QML | The ✓ or ✗ shown after a command |
-| `package/contents/ui/code/model.js` | 238 | JavaScript | Parses and validates the `servers` config JSON; availability and polling rules |
-| `package/contents/ui/code/commands.js` | 59 | JavaScript | Placeholder substitution, shell quoting, timeout wrapping, error lines |
+| `package/contents/ui/ConfigServers.qml` | 445 | QML | Settings page "Servers": server list, server fields, function list |
+| `package/contents/ui/FunctionEditor.qml` | 213 | QML | Settings form for one function, with fields per type |
+| `package/contents/ui/CommandField.qml` | 68 | QML | Settings field for one command, with preview and placeholder warnings |
+| `package/contents/ui/code/model.js` | 316 | JavaScript | Parses and validates the `servers` config JSON; availability and polling rules; editing helpers |
+| `package/contents/ui/code/commands.js` | 91 | JavaScript | Placeholder substitution, shell quoting, timeout wrapping, error lines, placeholder checks |
 
 If you know JavaScript, you already know half of QML: everything inside `function`, `{ … }` property expressions and `on…` handlers is ordinary JavaScript. The new part is the declarative layer around it, which Part 1 covers.
 
 ## Part 1: QML basics
 
-A QML file describes a tree of objects and how their properties depend on each other; the engine keeps those dependencies up to date for you. The nineteen ideas below explain almost every line in this repo.
+A QML file describes a tree of objects and how their properties depend on each other; the engine keeps those dependencies up to date for you. The twenty-one ideas below explain almost every line in this repo.
 
 ### 1. A file is a tree of objects
 
@@ -249,6 +253,45 @@ function ask(server, fn, turnOn) {
 
 `this.server` is needed because the function's parameters have the same names as the dialog's properties. `QQC2.Dialog.Ok | QQC2.Dialog.Cancel` comes from `import QtQuick.Controls as QQC2`, the standard controls that Kirigami builds on.
 
+### 20. Forms: Kirigami.FormLayout
+
+`Kirigami.FormLayout` lays out a settings form the KDE way: labels right-aligned in a left column, fields in a right column. A field doesn't get a separate `Label`; it names its own label with the attached property `Kirigami.FormData.label` \[11\]. A `Kirigami.Separator` with `FormData.isSection: true` starts a titled section. From `ConfigServers.qml`:
+
+```qml
+Kirigami.FormLayout {
+    QQC2.TextField {
+        Kirigami.FormData.label: i18nc("@label:textbox", "Host:")
+        text: page.currentServer ? page.currentServer.host : ""
+        onTextEdited: page.setServerField("host", text.trim())
+    }
+
+    Kirigami.Separator {
+        Kirigami.FormData.isSection: true
+        Kirigami.FormData.label: i18nc("@title:group", "Functions")
+    }
+    …
+}
+```
+
+When the window is too narrow (`wideMode` false), the labels move above the fields. Two forms on one page line up when one lists the other in `twinFormLayouts`, as the function editor does with the server form. One trap: a `Label` with `wrapMode` reports its *unwrapped* text width as `implicitWidth`, which can push the whole form out of wide mode. The settings files give such labels a small `Layout.preferredWidth` together with `Layout.fillWidth: true`.
+
+`onTextEdited` fires only when the user types, not when `text` changes through its binding. That keeps the binding \[4\] in place: the page writes the new value into its data, and the binding reads the same value back.
+
+### 21. Small types inside a file: `component`
+
+`component Name: BaseType { … }` declares a reusable type inside a file, without a file of its own \[8\]. It must sit directly in the root object, and can be used anywhere in that file. `ConfigServers.qml` declares the small icon-only buttons of its lists once:
+
+```qml
+component ListToolButton: QQC2.ToolButton {
+    display: QQC2.AbstractButton.IconOnly
+    QQC2.ToolTip.text: text
+    QQC2.ToolTip.visible: hovered
+    QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+}
+```
+
+and then writes `ListToolButton { icon.name: "go-up"; … }` six times. Compare `Component { … }` \[14\], which declares a template *object*, not a type.
+
 ## Part 2: The Plasma-specific parts
 
 Plasma adds a root type for widgets, two ways to show them, and a way to run shell commands; everything else is standard QML.
@@ -314,7 +357,35 @@ Two quirks shape `CommandRunner.qml`. Two identical command strings would be one
 </entry>
 ```
 
-KConfigXT only stores simple types, so the whole server list is one JSON string. `model.js` turns it into objects; `main.qml` calls it whenever the string changes. The settings pages that write this key come in phase 3.
+KConfigXT only stores simple types, so the whole server list is one JSON string. `model.js` turns it into objects; `main.qml` calls it whenever the string changes. The settings page writes it (next section).
+
+### Settings pages: config.qml, KCM.SimpleKCM and cfg_ properties
+
+`contents/config/config.qml` lists the pages of the settings dialog that "Configure Server Control…" opens:
+
+```qml
+ConfigModel {
+    ConfigCategory {
+        name: i18n("Servers")
+        icon: "network-server"
+        source: "ConfigServers.qml"
+    }
+}
+```
+
+`source` is a file in `contents/ui/`. Its root is a `KCM.SimpleKCM` (`import org.kde.kcmutils as KCM`), a scrollable page. The page doesn't touch `Plasmoid.configuration`. Instead it declares a property `cfg_<key>` for each key it edits, and Plasma does the rest:
+
+```qml
+property string cfg_servers
+property string cfg_serversDefault
+```
+
+1. When the page opens, Plasma sets `cfg_servers` to the saved value and `cfg_serversDefault` to the default from `main.xml`.
+2. When the page assigns `cfg_servers`, Plasma notices the change and enables Apply.
+3. On Apply or OK, Plasma writes `cfg_servers` to the config. `main.qml` gets `serversChanged` and re-parses.
+4. The Defaults button sets `cfg_servers` back to `cfg_serversDefault`. Declaring `cfg_serversDefault` also avoids a warning in the log.
+
+Cancel throws the page away without saving, so the page can change `cfg_servers` freely while the user edits.
 
 ### metadata.json
 
@@ -424,13 +495,13 @@ The popup.
 
 - **Line 11, `PlasmaExtras.Representation`:** a popup container with `header` and `contentItem` slots, so the heading and list get the standard Plasma look.
 - **Lines 16-19, `Layout.*` sizes:** tell Plasma how big the popup may be, in grid units (multiples of the font size).
-- **Line 21, `collapseMarginsHint`:**
-- **Lines 23-31, `activate()`:** where every click on a function ends up. It opens the confirmation dialog if the function has `confirm` set, otherwise runs it right away. lets the list run to the popup's edges instead of sitting inside a margin.
+- **Line 21, `collapseMarginsHint`:** lets the list run to the popup's edges instead of sitting inside a margin.
+- **Lines 23-31, `activate()`:** where every click on a function ends up. It opens the confirmation dialog if the function has `confirm` set, otherwise runs it right away.
 - **Lines 33-55, header:** a `RowLayout` with a heading that takes all spare width (`Layout.fillWidth`) and a refresh button. The button has `text` even though it shows only an icon (`display: IconOnly`); the text is used by screen readers and by its own tooltip (`ToolTip.text: text`). `ToolTip.*` are attached properties \[11\].
-- **Lines 57-94, list:** a `ScrollView` around a `ListView` \[9\]. `width: ListView.view.width` is an attached property that makes each row as wide as the list. `clip: true` stops rows from drawing outside the list while scrolling. `onFunctionActivated` (line 83) receives the signal from a server row \[16\]; `modelData` there is the row's server.
+- **Lines 57-101, list:** a `ScrollView` around a `ListView` \[9\]. `width: ListView.view.width` is an attached property that makes each row as wide as the list. `clip: true` stops rows from drawing outside the list while scrolling. `onFunctionActivated` (line 83) receives the signal from a server row \[16\]; `modelData` there is the row's server.
 - **Lines 65-78, config warning:** the list's `header` is an inline `Component` \[14\], set only when `configWarnings` isn't empty. `Kirigami.InlineMessage` is hidden by default, hence `visible: true`. It doesn't list the problems, which are English developer messages; it points to the log.
-- **Lines 86-92, `PlaceholderMessage`:** a child of the ListView, centred on it, shown only when `list.count === 0`, which is the case with the default config `[]`.
-- **Lines 96-123, `confirmDialog`:** a `Kirigami.PromptDialog` \[19\]. `server`, `fn` and `turnOn` are set by `ask()`; `title` and `subtitle` are bindings on them, so the text is right the moment the dialog opens. The subtitle shows the exact command after placeholder substitution. `preferredWidth` keeps the dialog narrower than the popup.
+- **Lines 86-99, `PlaceholderMessage`:** a child of the ListView, centred on it, shown only when `list.count === 0`, which is the case with the default config `[]`. Its `helpfulAction` is a button under the message. It triggers Plasma's own "configure" action (`Plasmoid.internalAction("configure")`), the same one as "Configure…" in the context menu, which opens the settings dialog.
+- **Lines 103-130, `confirmDialog`:** a `Kirigami.PromptDialog` \[19\]. `server`, `fn` and `turnOn` are set by `ask()`; `title` and `subtitle` are bindings on them, so the text is right the moment the dialog opens. The subtitle shows the exact command after placeholder substitution. `preferredWidth` keeps the dialog narrower than the popup.
 
 ### ServerDelegate.qml
 
@@ -466,6 +537,42 @@ The ✓ or ✗ after a command. A file of its own because the button and the swi
 - **Line 6:** the root is a `Kirigami.Icon`, so `ResultIcon` is an icon with one extra property, `result`. The caller passes `null` when nothing should show.
 - **Lines 10-13:** `checkmark` and `dialog-close` are monochrome theme icons. `isMask: true` paints them in `color`, here the theme's positive and negative colours, so they are a green tick and a red cross in any colour scheme.
 
+### config/config.qml
+
+The settings dialog's page list (Part 2, "Settings pages"). One page so far; the General page comes later in phase 3.
+
+### ConfigServers.qml
+
+The "Servers" settings page. It edits a parsed copy of the config and writes it back as JSON to `cfg_servers` on every change (Part 2).
+
+- **Lines 19-20, `cfg_servers`, `cfg_serversDefault`:** set by Plasma; see Part 2.
+- **Lines 22-30, page state:** `servers` is the list being edited, parsed with the same `Model.parseServers()` as the widget, so the page sees exactly what the popup shows. The selection is two indexes; `currentServer` and `currentFunction` are bindings on them \[4\], `null` when nothing is selected.
+- **Lines 34-50, `load()` and `_written`:** `load()` parses `cfg_servers`, at start and whenever `cfg_servers` changes from *outside*, e.g. through the Defaults button. The page's own writes change `cfg_servers` too; `_written` holds the last JSON the page wrote, so `onCfg_serversChanged` can tell the two apart.
+- **Lines 52-58, `edit(change)`:** every change goes through here. It copies the list (`Model.copyServers()`), lets the arrow function passed as `change` modify the copy, then assigns the copy to `servers` and its JSON to `cfg_servers`. The same copy-and-assign pattern as in `main.qml` \[4\]: mutating `servers` in place would not update any binding.
+- **Lines 60-130, edit functions:** one per button or field: add, remove and move servers and functions, set a field, change a function's type. After a move or remove, they fix the selection so it stays on the same item (`indexAfterMove()`). They are small on purpose; the rules live in `model.js`.
+- **Lines 147-151, `primaryStatusId`:** the id of the current server's first status function. The function list labels that one "Online state" instead of "Status", because it is the server's dot in the popup, not a control. Compared by id, not by object: a JS array used as a Repeater model may hand its delegates copies of the objects.
+- **Lines 154-159, `ListToolButton`:** an inline type \[21\].
+- **Lines 164-171, `InlineMessage`:** shown when parsing the saved config skipped or fixed something. Applying writes the cleaned-up list, so the message says so.
+- **Lines 177-256, server list:** a `Repeater` \[15\] of `ItemDelegate`s, standard clickable list rows; `highlighted` marks the selected one. Below it Add, Move up, Move down and Remove.
+- **Lines 258-271, `PlaceholderMessage`:** instead of the form while there are no servers.
+- **Lines 273-428, server form:** a `Kirigami.FormLayout` \[20\] with the server fields, then the "Functions" section. Each function row is an `ItemDelegate` whose `contentItem` is replaced by a `RowLayout` with icon, name, type and three tool buttons. "Add Function" opens a `QQC2.Menu` with the three types; `popup(button, 0, height)` places it under the button.
+- **Lines 430-443, `FunctionEditor`:** the form for the selected function. While nothing is selected it is hidden and gets a dummy `fn`, so its bindings never read from `null`. Its signals call `setFunctionField()` and `setFunctionType()`.
+
+### FunctionEditor.qml
+
+The form for one function. Like `FunctionControl.qml`, one file for all three types: fields of other types have `visible: false` and take no space.
+
+- **Lines 13-19, interface:** the function and server come in as properties; edits go out as signals \[16\]. The editor never changes `fn`, so all the data handling stays in `ConfigServers.qml`.
+- **Lines 26-28, `indexOf()`:** the `ComboBox` models are arrays of `{ value, text }`. `textRole` and `valueRole` tell the ComboBox which field to show and which to report as `currentValue`; `indexOf()` finds the entry to show for a stored value.
+- **Lines 38-50, type:** `onActivated` runs only on a user choice, not when `currentIndex` changes through its binding. The page then calls `Model.changeFunctionType()`.
+- **Lines 64-99, icon:** a button with the current icon that opens `KIconThemes.IconDialog` (`import org.kde.iconthemes`), KDE's icon picker, and a text field for typing a name. The dialog reports a choice by changing its `iconName`. The button sets `iconName` to the current icon before opening, so picking any other icon is a change; `settingUp` makes the handler ignore that preparatory change.
+- **Lines 106-162, commands:** one `CommandField` per command. The labels change with the type, e.g. "Check:" for a status function and "Command:" for an action.
+- **Lines 164-212, behavior:** "Available", "Ask for confirmation" (not for status functions), the check interval (only for status functions) and the timeout. `SpinBox` holds integers; `textFromValue` adds the unit, and `valueFromText` reads a typed number back.
+
+### CommandField.qml
+
+One command in the function editor: a monospace text field, the command as it will run on this server (`Commands.substitute()`, the same function the widget uses), and a warning line. The warning names unknown placeholders, like a typo `{hots}`, and placeholders whose server field is empty, like `{mac}` without a MAC address. The root is a `ColumnLayout`, so the three parts stack and the whole thing is one field in the `FormLayout` \[20\].
+
 ### code/model.js
 
 Pure data helpers, no QML \[12\]. Turns the `servers` config string into objects the UI can trust: every field it reads exists and has the right type.
@@ -474,7 +581,7 @@ Pure data helpers, no QML \[12\]. Turns the `servers` config string into objects
 - **`normalizeServer()` and `normalizeFunction()`:** copy the raw object with `Object.assign({}, raw)` first, so unknown fields like `tailscaleHost` survive, then overwrite the known fields with checked values. A function with an unknown `type` is skipped. Missing fields get defaults: `timeout` 10, `interval` 30, `availableWhen` `"always"`, `confirm` `false`, an icon per type. A server without a name shows its host.
 - **`uniqueId()`:** a missing or duplicate id is replaced by one built from the position, like `server-2` or `nas-fn-1`. Not random, so the same config gives the same ids every time and `serverStates` survives a re-parse.
 - **`asSeconds()`, `asString()`, `oneOf()`:** small type checks with a fallback. `asSeconds("30")` accepts a numeric string; `0`, negatives and `true` fall back.
-- **`serializeServers(servers)`:** `JSON.stringify` for writing the config, used from phase 3 on.
+- **`serializeServers(servers)`:** `JSON.stringify` for writing the config; the settings page uses it.
 - **`statusFunction(server)`:** returns the first function whose `type` is `"status"`, or `null`. The `(server && server.functions) || []` guard means a malformed server can't crash it.
 - **`controlFunctions(server)`:** all functions except the first status function, for the controls in the popup.
 - **`functionKey(server, fn)`:** `"<serverId>/<functionId>"`, the key for `functionStates`, `runningFunctions` and `functionResults`.
@@ -482,6 +589,7 @@ Pure data helpers, no QML \[12\]. Turns the `servers` config string into objects
 - **`changesOnlineState(fn)`:** true for an action that runs only online or only offline, like Wake or Power off. Only these start faster polling; an action available `always` is not expected to change the online state.
 - **`checkInterval(fn, fastPollUntil, now)`:** the function's own `interval`, or 5 s (`FAST_POLL_INTERVAL`) while the fast period lasts. A function whose interval is already shorter keeps it.
 - **Constants:** `FAST_POLL_DURATION` (120 s), `RESULT_OK_SECONDS` (3), and `RESULT_FAIL_SECONDS` (10). QML reads them like functions, e.g. `Model.RESULT_OK_SECONDS`.
+- **Editing helpers** (used by `ConfigServers.qml`): `copyServers()` makes a deep copy through JSON. `newId()` makes a random id like `fn-k3j9x0ab` that isn't used yet. `newServer()` and `newFunction()` create entries with defaults; their names come from the caller, because `i18n()` doesn't exist here. `changeFunctionType()` keeps name, icon, timeout, unknown fields and the fields both types share (`command` from status to action; `availableWhen` and `confirm` from action to toggle), drops the fields only the old type used, and fills in the new type's defaults through `normalizeFunction()`. `moveItem()` moves one entry of an array in place.
 
 ### code/commands.js
 
@@ -494,6 +602,7 @@ Turns a command template into a safe shell string.
 - **`withTimeout(command, seconds)`:** `timeout -k 2 10 sh -c '<command>'`. `sh -c` runs the whole command, pipes and all, as one unit that `timeout` can stop. `-k 2` sends a hard kill 2 s later if the command ignores the polite stop.
 - **`isTimeoutExit(code)`:** `timeout` exits with 124 after a normal stop and 137 after a kill.
 - **`errorLine(stderr)`:** the last non-empty line of the error output, for the inline message. Tools like ssh print warnings first and the real error last.
+- **`unknownPlaceholders(command)`, `emptyPlaceholders(command, server)`:** for the warnings in the settings. Both start from `placeholdersIn()`, which collects each `{word}` once. `{ssh}` counts as using `{host}`, since the ssh command needs it.
 
 ### metadata.json
 
@@ -505,6 +614,7 @@ The automatic load test, written in Bash, not QML.
 
 - **`Containerfile`:** a Fedora 44 image with the Plasma 6 packages, `plasmoidviewer`, a virtual X screen (`Xvfb`) and dbus.
 - **`entrypoint.sh`:** runs inside the container. Starts Xvfb, runs `plasmoidviewer` on the mounted package for 15 s, then searches the log for lines that mention `/package/` or applet load errors. Fails if it finds any, or if `plasmoidviewer` quit early.
+- **`page-harness.qml`:** used by `load-test.sh --page NAME`. `plasmoidviewer` never opens the settings dialog, so a broken settings page would pass the normal test. The harness replaces `main.qml` in a copy of the package with a widget that loads the page with a `Loader`, sets `cfg_servers` like Plasma does, and then calls the page's edit functions one per timer tick: select every function, add a server and functions, change a type, move and remove. Errors on the way show up in the report. With `--screenshots DIR`, `grabToImage()` saves a PNG after each step.
 - **`load-test.sh`:** runs on your machine. Builds the image if needed and starts the container with `--network none` and the package mounted read-only. `--self-test` swaps in a broken `main.qml` to prove the test catches errors. `--servers FILE` loads the widget with a test config: `plasmoidviewer` throws away a preset applet config, so the script copies the package and puts the file's content in as the default of the `servers` key in `main.xml`.
 
 ## Glossary and further reading
@@ -519,6 +629,7 @@ The automatic load test, written in Bash, not QML.
 | Delegate | The template for one list item (`ServerDelegate.qml`) |
 | Full representation | The popup (`FullRepresentation.qml`) |
 | Handler | Code that runs on a signal, named `on<Signal>` |
+| KCM | A settings page ("KDE Control Module"); `KCM.SimpleKCM` is the root of `ConfigServers.qml` |
 | id | A name for an object, usable only within its own file |
 | Model | The data a view shows; here the `serverList` array |
 | Plasmoid | A Plasma widget; the package in `package/` |
@@ -530,5 +641,5 @@ Good next reads, in this order:
 
 - [Qt: First steps with QML](https://doc.qt.io/qt-6/qmlfirststeps.html): the official introduction.
 - [Qt: Property binding](https://doc.qt.io/qt-6/qtqml-syntax-propertybinding.html): bindings in depth, including how assignments break them.
-- [KDE: Plasma widget tutorial](https://develop.kde.org/docs/plasma/widget/): writing widgets for Plasma 6, including config pages, which phase 3 will need.
+- [KDE: Plasma widget tutorial](https://develop.kde.org/docs/plasma/widget/): writing widgets for Plasma 6, including config pages.
 - [KDE: Kirigami tutorial](https://develop.kde.org/docs/getting-started/kirigami/): the UI library behind `Kirigami.Theme`, `Units` and dialogs.

@@ -148,7 +148,8 @@ Substituted in every command before it runs:
 | `{ssh}`                               | `ssh -o BatchMode=yes -o ConnectTimeout=5 {user}@{host}` |
 
 Shell-quote substituted values where needed. Unknown placeholders are left as is and flagged
-in the settings UI.
+in the settings UI. The settings also flag known placeholders whose server field is empty
+(e.g. `{mac}` without a MAC address; `{ssh}` counts as using `{host}`).
 
 ### Templates (preconfigured functions)
 
@@ -198,6 +199,17 @@ in the settings UI.
 
 - **Servers** page: add, edit, remove and reorder servers. Each server has a function list
   with add-from-template, edit, remove and reorder.
+  - Every edit is written to `cfg_servers` right away (as JSON, via `serializeServers()`), so
+    Apply enables; Cancel discards. The page parses the saved config with `parseServers()`. If
+    that produced warnings, an inline message says that invalid entries are fixed or left out
+    when applied.
+  - Until the templates exist, "Add function" offers the three types with default values.
+  - The function editor shows the fields of the function's type. Changing the type keeps name,
+    icon, timeout, unknown fields and the fields both types share; fields only the old type
+    used are dropped (`changeFunctionType()` in `model.js`).
+  - Under each command field: the command as it will run on this server (placeholders
+    substituted), and a warning for unknown or empty placeholders.
+  - The first status function is labelled "Online state" in the function list.
 - **General** page: default status interval and SSH options.
 - The **General** page also has JSON import/export of the whole setup, for backups and copying
   setups between machines. The format is `{ "version": 1, "general": {…}, "servers": [ … ] }`.
@@ -222,17 +234,21 @@ package/
         ├── FunctionControl.qml # one function: status indicator, action button or toggle switch
         ├── ResultIcon.qml    # ✓ / ✗ after a command
         ├── CommandRunner.qml # wraps the executable data engine
-        ├── ConfigServers.qml # settings page (KCM.SimpleKCM)
-        ├── ConfigGeneral.qml
+        ├── ConfigServers.qml # settings page (KCM.SimpleKCM): server list, server form, function list
+        ├── FunctionEditor.qml # settings form for one function
+        ├── CommandField.qml  # settings field for one command, with preview and placeholder warnings
+        ├── ConfigGeneral.qml # (planned)
         └── code/
             ├── model.js      # parse/validate/serialize config JSON
-            ├── templates.js  # preconfigured functions
+            ├── templates.js  # preconfigured functions (planned)
             └── commands.js   # placeholder substitution and quoting
 
 tools/
 ├── set-config.sh             # writes a server list JSON file into the running widget(s)
 └── sandbox/
     ├── Containerfile         # Podman image with Plasma 6, plasmoidviewer, Xvfb
+    ├── entrypoint.sh         # runs inside the container: Xvfb, plasmoidviewer, log check
+    ├── page-harness.qml      # test widget that loads a settings page (load-test.sh --page)
     └── load-test.sh          # builds the image if needed, runs the load test
 
 examples/
@@ -316,6 +332,13 @@ Rules:
   `plasmoidviewer` discards a preset applet config (`~/.config/plasmoidviewer-appletsrc`), so the
   script copies the package and makes the file the default of the `servers` key in `main.xml`.
   Invalid JSON is passed through as is, to test the fallback.
+- Settings pages never open in `plasmoidviewer`, so the plain load test doesn't cover them.
+  After changing a settings page (or a file it uses), also run
+  `tools/sandbox/load-test.sh --page ConfigServers --servers examples/demo-local.example.json`.
+  `tools/sandbox/page-harness.qml` replaces `main.qml` in a copy of the package, loads the page
+  with `cfg_servers` set, and calls its edit functions step by step (select each function, add,
+  change type, move, remove). Add `--screenshots DIR` to save a PNG per step and look at them.
+  When a page's edit functions change, update the steps in the harness.
 - `console.log` output is filtered in the sandbox; use `console.warn` for temporary debug output,
   and remove it afterwards.
 - The first run after an image rebuild takes a few minutes: `--userns=keep-id` makes Podman
@@ -335,14 +358,15 @@ Rules:
 
 Work in phases. Each phase should be usable and testable on its own.
 
-0. **Sandbox**: `Containerfile` and `load-test.sh`. Done when a minimal widget (a single
+0. **Sandbox** (done): `Containerfile` and `load-test.sh`. Done when a minimal widget (a single
    label) loads in the container without errors, and a deliberately broken QML file makes
    the test fail.
-1. **Skeleton**: package layout, metadata, compact and full representations, `CommandRunner`
+1. **Skeleton** (done): package layout, metadata, compact and full representations, `CommandRunner`
    with timeout. One server hardcoded in JS, with ping status shown as a dot.
 2. **Generic model** (done): JSON config model, all three function types, placeholders,
    confirmation dialog, inline feedback, faster polling after wake/poweroff.
-3. **Settings UI**: server and function editor, templates, JSON import/export.
+3. **Settings UI** (in progress): server and function editor (done), templates, General page,
+   JSON import/export.
 4. **Later options**:
    - Panel mode: one icon for all servers vs. one dot per server in the compact view, plus a
      per-instance "show only these servers" filter.
