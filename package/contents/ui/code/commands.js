@@ -57,3 +57,35 @@ function errorLine(stderr) {
     const lines = String(stderr || "").split("\n").map(l => l.trim()).filter(l => l !== "");
     return lines.length > 0 ? lines[lines.length - 1] : "";
 }
+
+// The placeholders substitute() knows.
+const PLACEHOLDERS = ["host", "mac", "user", "name", "ssh"];
+
+// Placeholder names used in `command`, each once, in order.
+function placeholdersIn(command) {
+    const names = [];
+    const re = /\{(\w+)\}/g;
+    let m;
+    while ((m = re.exec(String(command || ""))) !== null) {
+        if (names.indexOf(m[1]) < 0) {
+            names.push(m[1]);
+        }
+    }
+    return names;
+}
+
+// Placeholders in `command` that substitute() leaves as they are.
+function unknownPlaceholders(command) {
+    return placeholdersIn(command).filter(name => PLACEHOLDERS.indexOf(name) < 0);
+}
+
+// Known placeholders in `command` whose server field is empty, e.g. {mac}
+// without a MAC address. {ssh} counts as using {host}.
+function emptyPlaceholders(command, server) {
+    const used = placeholdersIn(command);
+    if (used.indexOf("ssh") >= 0 && used.indexOf("host") < 0) {
+        used.push("host");
+    }
+    return used.filter(name => name !== "ssh" && PLACEHOLDERS.indexOf(name) >= 0
+                       && String(server[name] || "") === "");
+}

@@ -89,6 +89,13 @@ PlasmaExtras.Representation {
                 visible: list.count === 0
                 iconName: "network-server"
                 text: i18n("No servers configured")
+                // Opens the settings dialog, like "Configure…" in the
+                // widget's context menu.
+                helpfulAction: QQC2.Action {
+                    icon.name: "configure"
+                    text: i18n("Configure…")
+                    onTriggered: Plasmoid.internalAction("configure").trigger()
+                }
             }
         }
     }

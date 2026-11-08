@@ -220,7 +220,7 @@ const FAST_POLL_INTERVAL = 5;
 const FAST_POLL_DURATION = 120;
 
 // An action that can only run online or only offline is expected to change
-// the online state. Actions available `always` (e.g. opening a web page)
+// the online/server state. Actions available `always` (e.g. opening a web page)
 // don't trigger faster polling.
 function changesOnlineState(fn) {
     return fn.type === "action" && (fn.availableWhen === "online" || fn.availableWhen === "offline");
@@ -236,3 +236,81 @@ function checkInterval(fn, fastPollUntil, now) {
 // Failures stay longer, so the message can be read.
 const RESULT_OK_SECONDS = 3;
 const RESULT_FAIL_SECONDS = 10;
+
+// ---------------------------------------------------------------------------
+// Editing, used by the settings page. The page edits a copy of the parsed
+// list and writes it back with serializeServers().
+
+// Fields that belong to one function type. changeFunctionType() drops the
+// ones the new type doesn't use, so the saved JSON stays clean.
+const TYPE_FIELDS = {
+    status: ["command", "interval"],
+    action: ["command", "verifyCommand", "availableWhen", "confirm"],
+    toggle: ["stateCommand", "onCommand", "offCommand", "availableWhen", "confirm"]
+};
+
+// A deep copy, so edits don't touch the list bindings still show.
+function copyServers(servers) {
+    return JSON.parse(JSON.stringify(servers));
+}
+
+// All ids in use, servers and functions.
+function usedIds(servers) {
+    const used = {};
+    for (const s of servers) {
+        used[s.id] = true;
+        for (const fn of s.functions || []) {
+            used[fn.id] = true;
+        }
+    }
+    return used;
+}
+
+// A new random id that isn't used anywhere in `servers` yet.
+function newId(prefix, servers) {
+    const used = usedIds(servers);
+    let id;
+    do {
+        id = prefix + "-" + Math.random().toString(36).slice(2, 10);
+    } while (used[id]);
+    return id;
+}
+
+// An empty server. `name` comes from the caller, since i18n() isn't
+// available in a library script.
+function newServer(name, servers) {
+    return { id: newId("server", servers), name: name, host: "", mac: "", user: "", functions: [] };
+}
+
+// A function of `type` with default values.
+function newFunction(type, name, servers) {
+    return normalizeFunction({ type: type, name: name }, newId("fn", servers), {}, [], "new function");
+}
+
+// A copy of `fn` as another type. Name, icon, timeout and the fields both
+// types share (e.g. `command` from status to action) are kept; fields the
+// new type doesn't use are dropped. A default icon follows the new type.
+function changeFunctionType(fn, type) {
+    const result = Object.assign({}, fn, { type: type });
+    for (const t in TYPE_FIELDS) {
+        for (const field of TYPE_FIELDS[t]) {
+            if (TYPE_FIELDS[type].indexOf(field) < 0) {
+                delete result[field];
+            }
+        }
+    }
+    if (fn.icon === DEFAULT_ICONS[fn.type]) {
+        delete result.icon;
+    }
+    return normalizeFunction(result, fn.id, {}, [], "changed function");
+}
+
+// Moves list[from] to list[to] in place. Returns false if either index is
+// out of range.
+function moveItem(list, from, to) {
+    if (from < 0 || from >= list.length || to < 0 || to >= list.length) {
+        return false;
+    }
+    list.splice(to, 0, list.splice(from, 1)[0]);
+    return true;
+}
