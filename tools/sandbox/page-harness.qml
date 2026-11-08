@@ -31,17 +31,30 @@ PlasmoidItem {
 
             width: 860
             height: 900
-            Component.onCompleted: setSource("@PAGE@.qml", {
-                cfg_servers: Plasmoid.configuration.servers,
-                cfg_serversDefault: "[]"
-            })
+            // Like Plasma's settings dialog: a cfg_ property for every
+            // config key.
+            Component.onCompleted: {
+                const props = {};
+                for (const key of Plasmoid.configuration.keys()) {
+                    props["cfg_" + key] = Plasmoid.configuration[key];
+                }
+                setSource("@PAGE@.qml", props);
+            }
             onLoaded: frame.steps = frame.makeSteps(item)
         }
 
-        // Each step is [name, function]. Pages without the functions get
-        // only the first screenshot.
+        // Each step is [name, function]. Steps for the General page set its
+        // cfg_ properties like its controls do; other pages without the
+        // functions below get only the first screenshot.
         function makeSteps(page) {
             const steps = [["loaded", () => {}]];
+            if (page.hasOwnProperty("cfg_sshOptions") && typeof page.selectServer !== "function") {
+                steps.push(["no-batchmode", () => {
+                    page.cfg_sshOptions = "-p 2222";
+                    page.cfg_defaultInterval = 120;
+                }]);
+                steps.push(["empty-options", () => page.cfg_sshOptions = ""]);
+            }
             if (typeof page.selectServer !== "function") {
                 return steps;
             }
@@ -58,6 +71,8 @@ PlasmoidItem {
                 page.setServerField("host", "example.invalid");
                 page.addFunction("status");
             }]);
+            steps.push(["interval-own", () => page.setFunctionField("interval", 45)]);
+            steps.push(["interval-default", () => page.setFunctionField("interval", undefined)]);
             steps.push(["add-action", () => page.addFunction("action")]);
             steps.push(["add-toggle", () => page.addFunction("toggle")]);
             steps.push(["placeholders", () => page.setFunctionField("stateCommand", "{ssh} test -f {path} && wol {mac}")]);
