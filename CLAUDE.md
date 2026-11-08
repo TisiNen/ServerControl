@@ -355,8 +355,9 @@ Rules:
   and `tools/sandbox/load-test.sh --page ConfigGeneral`.
   `tools/sandbox/page-harness.qml` replaces `main.qml` in a copy of the package, loads the page
   with a `cfg_` property for every config key (as Plasma does), and calls its edit functions
-  step by step (select each function, add, set and clear an interval, change type, move,
-  remove; on the General page, set the SSH options and the interval). Add `--screenshots DIR` to save a PNG per step and look at them.
+  step by step (select each function, click "Choose…" for the icon, add, set and clear an
+  interval, change type, move, remove; on the General page, set the SSH options and the
+  interval). Buttons the harness clicks have an `objectName`; it finds them with `findItem()`. Add `--screenshots DIR` to save a PNG per step and look at them.
   When a page's edit functions change, update the steps in the harness.
 - `console.log` output is filtered in the sandbox; use `console.warn` for temporary debug output,
   and remove it afterwards.

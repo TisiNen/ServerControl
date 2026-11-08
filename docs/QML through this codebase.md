@@ -19,7 +19,7 @@ This guide teaches QML using only the Server Control widget as it stands after t
 | `package/contents/ui/FunctionControl.qml` | 198 | QML | One function: status indicator, action button or toggle switch |
 | `package/contents/ui/ResultIcon.qml` | 14 | QML | The ✓ or ✗ shown after a command |
 | `package/contents/ui/ConfigServers.qml` | 458 | QML | Settings page "Servers": server list, server fields, function list |
-| `package/contents/ui/FunctionEditor.qml` | 239 | QML | Settings form for one function, with fields per type |
+| `package/contents/ui/FunctionEditor.qml` | 240 | QML | Settings form for one function, with fields per type |
 | `package/contents/ui/ConfigGeneral.qml` | 87 | QML | Settings page "General": default check interval and SSH options |
 | `package/contents/ui/CommandField.qml` | 70 | QML | Settings field for one command, with preview and placeholder warnings |
 | `package/contents/ui/code/model.js` | 329 | JavaScript | Parses and validates the `servers` config JSON; availability and polling rules; editing helpers |
@@ -585,9 +585,9 @@ The form for one function. Like `FunctionControl.qml`, one file for all three ty
 - **Lines 13-22, interface:** the function, the server and the two General settings come in as properties; edits go out as signals \[16\]. The editor never changes `fn`, so all the data handling stays in `ConfigServers.qml`.
 - **Lines 29-31, `indexOf()`:** the `ComboBox` models are arrays of `{ value, text }`. `textRole` and `valueRole` tell the ComboBox which field to show and which to report as `currentValue`; `indexOf()` finds the entry to show for a stored value.
 - **Lines 41-53, type:** `onActivated` runs only on a user choice, not when `currentIndex` changes through its binding. The page then calls `Model.changeFunctionType()`.
-- **Lines 67-102, icon:** a button with the current icon that opens `KIconThemes.IconDialog` (`import org.kde.iconthemes`), KDE's icon picker, and a text field for typing a name. The dialog reports a choice by changing its `iconName`. The button sets `iconName` to the current icon before opening, so picking any other icon is a change; `settingUp` makes the handler ignore that preparatory change.
-- **Lines 109-170, commands:** one `CommandField` per command. The labels change with the type, e.g. "Check:" for a status function and "Command:" for an action.
-- **Lines 172-238, behavior:** "Available", "Ask for confirmation" (not for status functions), the check interval (only for status functions) and the timeout. `SpinBox` holds integers; `textFromValue` adds the unit, and `valueFromText` reads a typed number back. The check interval has a "Default" check box: checked means the function has no `interval` of its own and uses the General default, which the disabled spin box shows. Checking it sends `fieldEdited("interval", undefined)`, and `setFunctionField()` in `ConfigServers.qml` deletes the field.
+- **Lines 67-103, icon:** a button with the current icon that opens `KIconThemes.IconDialog` (`import org.kde.iconthemes`), KDE's icon picker, and a text field for typing a name. The dialog is a separate window and reports a choice through its read-only `iconName`. `iconName` keeps the last pick, so picking the same icon again, for another function, doesn't change it; the `accepted` signal covers that case. Both handlers call `apply()`, and applying the same icon twice changes nothing. `objectName: "chooseIconButton"` lets the sandbox test find the button and click it.
+- **Lines 110-171, commands:** one `CommandField` per command. The labels change with the type, e.g. "Check:" for a status function and "Command:" for an action.
+- **Lines 173-239, behavior:** "Available", "Ask for confirmation" (not for status functions), the check interval (only for status functions) and the timeout. `SpinBox` holds integers; `textFromValue` adds the unit, and `valueFromText` reads a typed number back. The check interval has a "Default" check box: checked means the function has no `interval` of its own and uses the General default, which the disabled spin box shows. Checking it sends `fieldEdited("interval", undefined)`, and `setFunctionField()` in `ConfigServers.qml` deletes the field.
 
 ### CommandField.qml
 

@@ -46,6 +46,20 @@ PlasmoidItem {
         // Each step is [name, function]. Steps for the General page set its
         // cfg_ properties like its controls do; other pages without the
         // functions below get only the first screenshot.
+        // The first item named `name` in the tree below `item`, or null.
+        function findItem(item, name) {
+            if (item.objectName === name) {
+                return item;
+            }
+            for (const child of item.children) {
+                const found = findItem(child, name);
+                if (found) {
+                    return found;
+                }
+            }
+            return null;
+        }
+
         function makeSteps(page) {
             const steps = [["loaded", () => {}]];
             if (page.hasOwnProperty("cfg_sshOptions") && typeof page.selectServer !== "function") {
@@ -66,6 +80,17 @@ PlasmoidItem {
                     }]);
                 }
             }
+            // Runs the button's onClicked like a real click. The dialog
+            // opens as a window; the test can't use it, but errors in the
+            // handler show up.
+            steps.push(["click-choose-icon", () => {
+                const button = frame.findItem(page, "chooseIconButton");
+                if (!button) {
+                    // Thrown, not logged, so the load test fails.
+                    throw new Error("page-harness: chooseIconButton not found");
+                }
+                button.clicked();
+            }]);
             steps.push(["add-server", () => page.addServer()]);
             steps.push(["add-status", () => {
                 page.setServerField("host", "example.invalid");

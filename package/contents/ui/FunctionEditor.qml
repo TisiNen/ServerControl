@@ -69,16 +69,11 @@ Kirigami.FormLayout {
         Layout.fillWidth: true
 
         QQC2.Button {
+            // Found and clicked by the sandbox test (page-harness.qml).
+            objectName: "chooseIconButton"
             icon.name: editor.fn.icon
             text: i18nc("@action:button", "Choose…")
-            onClicked: {
-                // Set the current icon first, so picking any other one
-                // emits iconNameChanged.
-                iconDialog.settingUp = true;
-                iconDialog.iconName = editor.fn.icon;
-                iconDialog.settingUp = false;
-                iconDialog.open();
-            }
+            onClicked: iconDialog.open()
         }
 
         QQC2.TextField {
@@ -89,16 +84,22 @@ Kirigami.FormLayout {
         }
     }
 
+    // KDE's icon picker, a separate window. `iconName` is read-only and
+    // keeps the last pick, so picking the same icon again for another
+    // function doesn't change it. `accepted` covers that case; the change
+    // handler covers the case that `accepted` comes before the new name.
+    // Applying the same icon twice changes nothing.
     KIconThemes.IconDialog {
         id: iconDialog
 
-        property bool settingUp: false
-
-        onIconNameChanged: {
-            if (!settingUp && iconName !== "") {
+        function apply() {
+            if (iconName !== "") {
                 editor.fieldEdited("icon", iconName);
             }
         }
+
+        onIconNameChanged: apply()
+        onAccepted: apply()
     }
 
     Kirigami.Separator {
