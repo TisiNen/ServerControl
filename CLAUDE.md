@@ -49,9 +49,12 @@ Parsing and validation live in `code/model.js` (`parseServers()`), with these ru
 - An entry that isn't an object, or a function with an unknown `type`, is skipped with a warning.
 - A missing or duplicate `id` (servers globally, functions per server) is replaced by a
   position-based id (`server-2`, `<serverId>-fn-1`), so ids stay stable across re-parses.
-- Missing or invalid fields get defaults: `timeout` 10, `interval` 30, `availableWhen` `always`,
+- Missing or invalid fields get defaults: `timeout` 10, `availableWhen` `always`,
   `confirm` false, commands `""`, an icon per type. A server without a name shows its host.
   Numbers must be positive; numeric strings are accepted.
+- A status function's `interval` is optional. A missing or invalid one is left out, and the
+  default check interval from the General settings applies (config key `defaultInterval`,
+  default 30; `statusInterval()` in `model.js`).
 - Warnings are English developer messages, logged with `console.warn`. The popup only shows that
   there were some.
 
@@ -108,7 +111,7 @@ it and other unknown fields instead of dropping them.
 
 | Type     | Commands                                  | Semantics                                                                                                                    |
 | -------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `status` | `command`                                 | Runs every `interval` seconds. Exit code 0 means online. A server's online state comes from its **first** `status` function. |
+| `status` | `command`                                 | Runs every `interval` seconds (or the General default). Exit code 0 means online. A server's online state comes from its **first** `status` function. |
 | `action` | `command`, optional `verifyCommand`       | Runs on click. Success is the exit code of `verifyCommand` if set, otherwise of `command`.                                   |
 | `toggle` | `stateCommand`, `onCommand`, `offCommand` | `stateCommand` exit 0 means on. A click runs `onCommand` or `offCommand`, then re-reads the state.                           |
 
@@ -145,7 +148,11 @@ Substituted in every command before it runs:
 | Placeholder                           | Value                                                    |
 | ------------------------------------- | -------------------------------------------------------- |
 | `{host}`, `{mac}`, `{user}`, `{name}` | From the server entry                                    |
-| `{ssh}`                               | `ssh -o BatchMode=yes -o ConnectTimeout=5 {user}@{host}` |
+| `{ssh}`                               | `ssh <SSH options> {user}@{host}`                        |
+
+The SSH options come from the General settings (config key `sshOptions`, default
+`-o BatchMode=yes -o ConnectTimeout=5`). They are inserted as typed, not quoted; empty options
+give plain `ssh {user}@{host}`.
 
 Shell-quote substituted values where needed. Unknown placeholders are left as is and flagged
 in the settings UI. The settings also flag known placeholders whose server field is empty
@@ -155,7 +162,7 @@ in the settings UI. The settings also flag known placeholders whose server field
 
 "Add function" offers these, each filled with editable defaults:
 
-- **Status (ping)**: `ping -c 1 -W 1 {host}`, interval 30
+- **Status (ping)**: `ping -c 1 -W 1 {host}`, default interval
 - **Wake-on-LAN**: `wakeonlan {mac}`, available offline
 - **Power off**: `{ssh} sudo systemctl poweroff`, available online, confirm on
 - **Reboot**: `{ssh} sudo systemctl reboot`, available online, confirm on
@@ -209,8 +216,18 @@ in the settings UI. The settings also flag known placeholders whose server field
     used are dropped (`changeFunctionType()` in `model.js`).
   - Under each command field: the command as it will run on this server (placeholders
     substituted), and a warning for unknown or empty placeholders.
-  - The first status function is labelled "Online state" in the function list.
+  - The first status function is labelled "Online/Server state" in the function list.
+  - A status function's check interval has a "Default" check box. Checked, the function has no
+    `interval` and uses the General default, which the disabled spin box shows.
+  - The command previews use the saved SSH options. Changes on the General page show here only
+    after Apply, because the dialog shows one page at a time.
 - **General** page: default status interval and SSH options.
+  - The controls write `cfg_defaultInterval` and `cfg_sshOptions` directly.
+  - Below the SSH options: what `{ssh}` becomes, and a warning if the options lack
+    `BatchMode=yes` (ssh would wait for a password until the timeout).
+  - When either setting changes, the widget runs all status checks on the next tick.
+  - Plasma passes every config key (and its `…Default`) to every page as `cfg_<key>`. Each page
+    declares all of them, or Plasma logs a warning for each missing one.
 - The **General** page also has JSON import/export of the whole setup, for backups and copying
   setups between machines. The format is `{ "version": 1, "general": {…}, "servers": [ … ] }`.
   Import also accepts a bare server list.
@@ -224,7 +241,7 @@ package/
 ├── metadata.json             # KPackageStructure: "Plasma/Applet", X-Plasma-API-Minimum-Version: "6.0"
 └── contents/
     ├── config/
-    │   ├── main.xml          # KConfigXT schema (servers JSON string, general options)
+    │   ├── main.xml          # KConfigXT schema: servers (JSON string), defaultInterval, sshOptions
     │   └── config.qml        # ConfigModel with ConfigCategory pages
     └── ui/
         ├── main.qml          # PlasmoidItem root
@@ -237,7 +254,7 @@ package/
         ├── ConfigServers.qml # settings page (KCM.SimpleKCM): server list, server form, function list
         ├── FunctionEditor.qml # settings form for one function
         ├── CommandField.qml  # settings field for one command, with preview and placeholder warnings
-        ├── ConfigGeneral.qml # (planned)
+        ├── ConfigGeneral.qml # settings page: default check interval, SSH options
         └── code/
             ├── model.js      # parse/validate/serialize config JSON
             ├── templates.js  # preconfigured functions (planned)
@@ -334,10 +351,12 @@ Rules:
   Invalid JSON is passed through as is, to test the fallback.
 - Settings pages never open in `plasmoidviewer`, so the plain load test doesn't cover them.
   After changing a settings page (or a file it uses), also run
-  `tools/sandbox/load-test.sh --page ConfigServers --servers examples/demo-local.example.json`.
+  `tools/sandbox/load-test.sh --page ConfigServers --servers examples/demo-local.example.json`
+  and `tools/sandbox/load-test.sh --page ConfigGeneral`.
   `tools/sandbox/page-harness.qml` replaces `main.qml` in a copy of the package, loads the page
-  with `cfg_servers` set, and calls its edit functions step by step (select each function, add,
-  change type, move, remove). Add `--screenshots DIR` to save a PNG per step and look at them.
+  with a `cfg_` property for every config key (as Plasma does), and calls its edit functions
+  step by step (select each function, add, set and clear an interval, change type, move,
+  remove; on the General page, set the SSH options and the interval). Add `--screenshots DIR` to save a PNG per step and look at them.
   When a page's edit functions change, update the steps in the harness.
 - `console.log` output is filtered in the sandbox; use `console.warn` for temporary debug output,
   and remove it afterwards.
@@ -365,8 +384,8 @@ Work in phases. Each phase should be usable and testable on its own.
    with timeout. One server hardcoded in JS, with ping status shown as a dot.
 2. **Generic model** (done): JSON config model, all three function types, placeholders,
    confirmation dialog, inline feedback, faster polling after wake/poweroff.
-3. **Settings UI** (in progress): server and function editor (done), templates, General page,
-   JSON import/export.
+3. **Settings UI** (in progress): server and function editor (done), General page with default
+   interval and SSH options (done), templates, JSON import/export.
 4. **Later options**:
    - Panel mode: one icon for all servers vs. one dot per server in the compact view, plus a
      per-instance "show only these servers" filter.

@@ -4,25 +4,26 @@ Nov 4, 2026 · @Tilo
 
 ## How to read this guide
 
-This guide teaches QML using only the Server Control widget as it stands after the first step of phase 3 (on top of phase 2's config model, function types, confirmation dialog and inline feedback: a settings page to edit servers and functions): 15 source files, about 2140 lines. Read Part 1 first, then follow a status check and a click through the code in Part 3; the per-file notes in Part 4 are for looking things up.
+This guide teaches QML using only the Server Control widget as it stands after the second step of phase 3 (on top of phase 2's config model, function types, confirmation dialog and inline feedback: the settings pages "Servers" and "General"): 16 source files, about 2330 lines. Read Part 1 first, then follow a status check and a click through the code in Part 3; the per-file notes in Part 4 are for looking things up.
 
 | File | Lines | Language | What it is |
 | --- | --- | --- | --- |
 | `package/metadata.json` | 18 | JSON | Tells Plasma this folder is a widget: name, icon, plugin ID |
-| `package/contents/config/main.xml` | 15 | XML | The config schema: one `servers` key holding JSON |
-| `package/contents/config/config.qml` | 11 | QML | The list of pages in the settings dialog |
-| `package/contents/ui/main.qml` | 384 | QML | The root of the widget: config, state, timer, running all commands |
+| `package/contents/config/main.xml` | 28 | XML | The config schema: the `servers` JSON, the default check interval, the SSH options |
+| `package/contents/config/config.qml` | 16 | QML | The list of pages in the settings dialog |
+| `package/contents/ui/main.qml` | 402 | QML | The root of the widget: config, state, timer, running all commands |
 | `package/contents/ui/CommandRunner.qml` | 52 | QML | Runs shell commands in the background and calls you back |
 | `package/contents/ui/CompactRepresentation.qml` | 55 | QML | The panel icon with its coloured dot and spinner |
-| `package/contents/ui/FullRepresentation.qml` | 131 | QML | The popup: heading, refresh button, config warning, server list, confirmation dialog |
+| `package/contents/ui/FullRepresentation.qml` | 129 | QML | The popup: heading, refresh button, config warning, server list, confirmation dialog |
 | `package/contents/ui/ServerDelegate.qml` | 127 | QML | One server in the popup list: dot, name, state, its functions and their errors |
 | `package/contents/ui/FunctionControl.qml` | 198 | QML | One function: status indicator, action button or toggle switch |
 | `package/contents/ui/ResultIcon.qml` | 14 | QML | The ✓ or ✗ shown after a command |
-| `package/contents/ui/ConfigServers.qml` | 445 | QML | Settings page "Servers": server list, server fields, function list |
-| `package/contents/ui/FunctionEditor.qml` | 213 | QML | Settings form for one function, with fields per type |
-| `package/contents/ui/CommandField.qml` | 68 | QML | Settings field for one command, with preview and placeholder warnings |
-| `package/contents/ui/code/model.js` | 316 | JavaScript | Parses and validates the `servers` config JSON; availability and polling rules; editing helpers |
-| `package/contents/ui/code/commands.js` | 91 | JavaScript | Placeholder substitution, shell quoting, timeout wrapping, error lines, placeholder checks |
+| `package/contents/ui/ConfigServers.qml` | 458 | QML | Settings page "Servers": server list, server fields, function list |
+| `package/contents/ui/FunctionEditor.qml` | 239 | QML | Settings form for one function, with fields per type |
+| `package/contents/ui/ConfigGeneral.qml` | 87 | QML | Settings page "General": default check interval and SSH options |
+| `package/contents/ui/CommandField.qml` | 70 | QML | Settings field for one command, with preview and placeholder warnings |
+| `package/contents/ui/code/model.js` | 329 | JavaScript | Parses and validates the `servers` config JSON; availability and polling rules; editing helpers |
+| `package/contents/ui/code/commands.js` | 105 | JavaScript | Placeholder substitution, shell quoting, timeout wrapping, error lines, placeholder checks |
 
 If you know JavaScript, you already know half of QML: everything inside `function`, `{ … }` property expressions and `on…` handlers is ordinary JavaScript. The new part is the declarative layer around it, which Part 1 covers.
 
@@ -226,13 +227,13 @@ and emits it like a function call: `control.activated(true)`. `ServerDelegate.qm
 
 ### 17. Restoring a binding: Qt.binding
 
-Clicking a `Switch` sets its `checked` property directly. That is an assignment, so it removes the binding `checked: control.fnState === "on"` \[4\]. To get it back, assign a binding object:
+Clicking a `Switch` sets its `checked` property from inside the control. The binding `checked: control.fnState === "on"` \[4\] survives that: only an assignment in JavaScript removes a binding. But a binding only re-evaluates when something it reads changes, and the click doesn't change `fnState`. So the switch would stay where the user clicked it, not where the real state is. Assigning a binding object re-evaluates it right away:
 
 ```qml
 checked = Qt.binding(() => control.fnState === "on");
 ```
 
-`FunctionControl.qml` does this in `onToggled`, so the switch shows the real state, read from the server, rather than where the user clicked it.
+`FunctionControl.qml` does this in `onToggled`, so the switch shows the real state, read from the server, rather than where the user clicked it. The settings controls don't need it: every click there changes the data they are bound to, so their bindings re-evaluate on their own (see the "Default" check box next to the check interval in `FunctionEditor.qml`).
 
 ### 18. Pointer handlers: HoverHandler
 
@@ -359,6 +360,8 @@ Two quirks shape `CommandRunner.qml`. Two identical command strings would be one
 
 KConfigXT only stores simple types, so the whole server list is one JSON string. `model.js` turns it into objects; `main.qml` calls it whenever the string changes. The settings page writes it (next section).
 
+Two more entries hold the General settings: `defaultInterval` (an `Int` with `<min>1</min>`) and `sshOptions` (a `String`). `main.qml` reads them where they are used, as `Plasmoid.configuration.defaultInterval` and `Plasmoid.configuration.sshOptions`, and its `Connections` handlers `onDefaultIntervalChanged` and `onSshOptionsChanged` reschedule all status checks when they change.
+
 ### Settings pages: config.qml, KCM.SimpleKCM and cfg_ properties
 
 `contents/config/config.qml` lists the pages of the settings dialog that "Configure Server Control…" opens:
@@ -373,19 +376,28 @@ ConfigModel {
 }
 ```
 
-`source` is a file in `contents/ui/`. Its root is a `KCM.SimpleKCM` (`import org.kde.kcmutils as KCM`), a scrollable page. The page doesn't touch `Plasmoid.configuration`. Instead it declares a property `cfg_<key>` for each key it edits, and Plasma does the rest:
+`source` is a file in `contents/ui/`. Its root is a `KCM.SimpleKCM` (`import org.kde.kcmutils as KCM`), a scrollable page. The page doesn't touch `Plasmoid.configuration`. Instead it declares a property `cfg_<key>` for each config key, and Plasma does the rest:
 
 ```qml
 property string cfg_servers
 property string cfg_serversDefault
 ```
 
-1. When the page opens, Plasma sets `cfg_servers` to the saved value and `cfg_serversDefault` to the default from `main.xml`.
+1. When the page opens, Plasma sets `cfg_servers` to the saved value and `cfg_serversDefault` to the default from `main.xml`. It does this for *every* key on *every* page, so `ConfigGeneral.qml` also declares `cfg_servers`, even though it doesn't edit it: an undeclared key logs a warning.
 2. When the page assigns `cfg_servers`, Plasma notices the change and enables Apply.
 3. On Apply or OK, Plasma writes `cfg_servers` to the config. `main.qml` gets `serversChanged` and re-parses.
 4. The Defaults button sets `cfg_servers` back to `cfg_serversDefault`. Declaring `cfg_serversDefault` also avoids a warning in the log.
 
-Cancel throws the page away without saving, so the page can change `cfg_servers` freely while the user edits.
+Cancel throws the page away without saving, so the page can change `cfg_servers` freely while the user edits. The dialog shows one page at a time and saves only that page's `cfg_` values; switching pages with unsaved changes asks to apply or discard them first. So two pages that both declare `cfg_servers` can't overwrite each other's edits.
+
+A page that only edits simple values can bind its controls straight to the `cfg_` properties, as `ConfigGeneral.qml` does:
+
+```qml
+QQC2.SpinBox {
+    value: page.cfg_defaultInterval
+    onValueModified: page.cfg_defaultInterval = value
+}
+```
 
 ### metadata.json
 
@@ -399,18 +411,18 @@ A timer starts the ping, `CommandRunner` runs it in the background, and one assi
 
 The top two rows are code that runs; the bottom row updates by itself because each part binds to `serverStates`.
 
-1. **The widget starts.** Plasma creates the `PlasmoidItem` in `main.qml`. `Component.onCompleted` (`main.qml:336`) calls `applyConfig()` (`main.qml:296-334`), which reads `Plasmoid.configuration.servers` and passes it to `Model.parseServers()`. Say the config holds one server "NAS" at `192.168.1.10` with id `nas` and a ping status function; then `serverList` becomes an array with that one server. `serverStates` starts as `{}`, so every server counts as "not checked yet".
-2. **The timer fires.** `Timer` has `triggeredOnStart: true`, so `onTriggered` runs right away, then every 1000 ms (`main.qml:367-383`). For each status function of each server it compares `Date.now()` with `_nextCheck[key]`, where `key` is `Model.functionKey(s, fn)`, e.g. `"nas/ping"`. Nothing is stored yet, so `|| 0` makes the check due and it calls `checkStatus(s, fn)`.
-3. **checkStatus prepares the command** (`main.qml:118-141`).
+1. **The widget starts.** Plasma creates the `PlasmoidItem` in `main.qml`. `Component.onCompleted` (`main.qml:344`) calls `applyConfig()` (`main.qml:304-342`), which reads `Plasmoid.configuration.servers` and passes it to `Model.parseServers()`. Say the config holds one server "NAS" at `192.168.1.10` with id `nas` and a ping status function; then `serverList` becomes an array with that one server. `serverStates` starts as `{}`, so every server counts as "not checked yet".
+2. **The timer fires.** `Timer` has `triggeredOnStart: true`, so `onTriggered` runs right away, then every 1000 ms (`main.qml:385-401`). For each status function of each server it compares `Date.now()` with `_nextCheck[key]`, where `key` is `Model.functionKey(s, fn)`, e.g. `"nas/ping"`. Nothing is stored yet, so `|| 0` makes the check due and it calls `checkStatus(s, fn)`.
+3. **checkStatus prepares the command** (`main.qml:124-148`).
    1. `primary` is true if `fn` is the server's first status function (`Model.statusFunction(server)`). Only that one decides online or offline.
    2. If a check for this function is already running (`_checking[key]`), it stops here. This prevents two pings piling up when a host is slow.
-   3. It remembers the current `_configGeneration`, marks the check as running and schedules the next one: now + `interval` (30 s), or 5 s while the server is polled faster after Wake (`Model.checkInterval()`).
-   4. `Commands.substitute("ping -c 1 -W 1 {host}", server)` turns the template into `ping -c 1 -W 1 192.168.1.10`.
+   3. It remembers the current `_configGeneration`, marks the check as running and schedules the next one: now + the function's `interval`, or the default check interval from the General settings (30 s) if it has none, or 5 s while the server is polled faster after Wake (`Model.checkInterval()`).
+   4. `commandFor("ping -c 1 -W 1 {host}", server)` turns the template into `ping -c 1 -W 1 192.168.1.10`. It calls `Commands.substitute()` with the SSH options from the General settings, which `{ssh}` would need.
    5. It calls `runner.run(command, 10, callback)`. The callback is an arrow function that will run later.
 4. **CommandRunner starts it** (`CommandRunner.qml:21-29`). `Commands.withTimeout` wraps the command as `timeout -k 2 10 sh -c 'ping -c 1 -W 1 192.168.1.10'`, and `  # 1 ` is appended to make the source name unique. The callback is stored under that exact string in `_callbacks`, and `connectSource(source)` hands the command to Plasma.
 5. **Nothing blocks.** `run()` returns immediately and the UI keeps responding. Plasma runs the shell command in a separate process.
 6. **The result arrives** (`CommandRunner.qml:31-51`). Plasma emits `newData(sourceName, data)`. The handler looks up the callback by `sourceName`, removes it, disconnects the source and checks whether the exit code is a timeout (124 or 137). Then it calls the callback with `{ exitCode: 0, stdout, stderr, timedOut: false }`.
-7. **The state changes** (`main.qml:130-140`). If the config changed while the ping ran, the generation no longer matches and the result is dropped. Otherwise the callback clears `_checking` and calls `setServerState(server, "online")`. `setServerState` copies `serverStates`, sets the entry and assigns the copy back. Because the server just came online, it also calls `refreshToggles(server)`. A further status function would call `setFunctionState(key, "ok")` instead.
+7. **The state changes** (`main.qml:136-147`). If the config changed while the ping ran, the generation no longer matches and the result is dropped. Otherwise the callback clears `_checking` and calls `setServerState(server, "online")`. `setServerState` copies `serverStates`, sets the entry and assigns the copy back. Because the server just came online, it also calls `refreshToggles(server)`. A further status function would call `setFunctionState(key, "ok")` instead.
 8. **Bindings take over.** That single assignment is the only thing the code "does"; everything below happens because properties read `serverStates`:
    - `onlineCount` recalculates to 1, so `overallState` becomes `"all"`.
    - In the panel, `dotColor` becomes `Kirigami.Theme.positiveTextColor`, so the dot `Rectangle` turns green (`CompactRepresentation.qml:15-17, 51`).
@@ -427,9 +439,9 @@ A note on step 8: `toolTipSubText` and the delegate's label call a *function*, `
 Say "Skip alarm" is a toggle with `confirm: true`, the server is online and the switch shows on. The user clicks it.
 
 1. **The switch reacts** (`FunctionControl.qml:142-157`). `onToggled` reads the new `checked` (false), restores the binding \[17\] and emits `activated(false)` \[16\].
-2. **The signal travels up.** `ServerDelegate.qml:96` turns it into `functionActivated(fn, false)`; `FullRepresentation.qml:83` calls `full.activate(modelData, fn, false)`.
-3. **Confirm first** (`FullRepresentation.qml:25-31`). `fn.confirm` is true, so `confirmDialog.ask()` fills the dialog and opens it \[19\]. Its title reads "Turn off “Skip alarm” on NAS?". If the user cancels, nothing else happens; the switch still shows the real state because of step 1.
-4. **The command runs** (`main.qml:202-236`). `onAccepted` calls `runFunction(server, fn, false)`. It checks once more that the function isn't running and is available, picks `offCommand`, marks the function as running and counts up `actionsRunning`. In the popup, the switch is disabled and a spinner takes the place of its handle; in the panel, the icon dims and a spinner turns over it.
+2. **The signal travels up.** `ServerDelegate.qml:96` turns it into `functionActivated(fn, false)`; `FullRepresentation.qml:81` calls `full.activate(modelData, fn, false)`.
+3. **Confirm first** (`FullRepresentation.qml:23-29`). `fn.confirm` is true, so `confirmDialog.ask()` fills the dialog and opens it \[19\]. Its title reads "Turn off “Skip alarm” on NAS?". If the user cancels, nothing else happens; the switch still shows the real state because of step 1.
+4. **The command runs** (`main.qml:209-243`). `onAccepted` calls `runFunction(server, fn, false)`. It checks once more that the function isn't running and is available, picks `offCommand`, marks the function as running and counts up `actionsRunning`. In the popup, the switch is disabled and a spinner takes the place of its handle; in the panel, the icon dims and a spinner turns over it.
 5. **The result arrives.** For an action with a `verifyCommand`, that command runs next and its result counts instead. Then `finish` clears the running mark and counts down. It stores the result with `setResult()`, which shows a ✗ where the handle was and the error under the server's controls, if the command failed. For an action that only runs online or only offline, such as Wake, it also starts faster polling with `startFastPoll()`. Finally it calls `refreshServer(server)`.
 6. **The result goes away.** The timer calls `expireResults()` every second. After 3 s (✓) or 10 s (✗) it removes the result, and the icon and the error line disappear. Until then the control stays enabled, even if the function has just become unavailable (see `looksEnabled` in `FunctionControl.qml`).
 7. **Everything is read again.** `refreshServer` runs the server's status checks and `refreshToggles`, which runs every available toggle's `stateCommand` through `readToggle()`. When "Skip alarm"'s state command exits non-zero, `setFunctionState(key, "off")` updates `functionStates`, and the switch's binding shows it off.
@@ -448,24 +460,24 @@ The root of the widget and the only place that holds state. Everything else read
 - **Lines 32-33, `actionsRunning` and `busy`:** counts action and toggle commands in flight; `busy` drives the panel spinner. Status checks and toggle reads deliberately don't count, or the spinner would flash every 30 s.
 - **Lines 35-46, `onlineCount` and `overallState`:** two derived bindings \[4\]. `overallState` uses chained `? :` to pick `"all"`, `"some"` or `"none"`; the `serverList.length > 0` guard stops an empty list from counting as "all online".
 - **Lines 48-59, bookkeeping:** mutated in place because no binding reads them. `_nextCheck` and `_checking` are per status function. `_readSeq` numbers each toggle read, so an older read that finishes late can't overwrite a newer one. `_fastPollUntil` holds, per server, when its faster polling ends. `_configGeneration` counts config changes, so a command started with the old config can't overwrite state after a change. `_appliedConfig` is the last config string parsed.
-- **Lines 61-78, `stateText()` and `functionName()`:** translated labels. `i18n()` is Plasma's translation function; every user-visible string goes through it.
-- **Lines 80-116, setters:** `setServerState()`, `setFunctionState()` and `setRunning()` use the copy-and-assign pattern. `setServerState()` also reads the toggles when a server comes online.
-- **Lines 118-141, `checkStatus()`:** see Part 3, step 3.
-- **Lines 143-159, `readToggle()`:** runs `stateCommand`. Exit 0 means on, other codes off, a timeout `"unknown"`. The optional `done` callback runs whenever the command finishes, even when the result is dropped, so whoever passed it can always clean up.
-- **Lines 161-172, `retryToggle()`:** what a click on a toggle in the `"unknown"` state does: it reads the state again instead of switching, since without the current state the click has no clear meaning. It marks the toggle as running for the read, so the switch shows the spinner, and passes `done` to clear the mark. It doesn't count up `actionsRunning`: a read changes nothing on the server.
-- **Lines 174-200, `refreshToggles()`, `refreshServer()`, `refreshAll()`:** toggles are never polled, only read on these occasions. `refreshToggles()` skips toggles that are running or unavailable, e.g. an SSH check while the server is off.
-- **Lines 202-236, `runFunction()`:** see "A click, start to finish". `finish` is an arrow function stored in a `const` and passed as a callback to one of two `runner.run()` calls. The verify call wraps it in another arrow function, `verifyResult => finish(verifyResult, true)`, to pass the extra argument. It always counts down, even after a config change, so `actionsRunning` can't get stuck.
-- **Lines 238-253, `setResult()`:** stores `ok`, the error line, the full stderr and the time the result expires (`expiresAt`). It is replaced by the next result of the same function.
-- **Lines 255-268, `expireResults()`:** called by the timer. Removes every result whose `expiresAt` has passed. `next` stays `null` until something changes, so most ticks assign nothing and no binding re-evaluates.
-- **Lines 270-277, `resultText()`:** the error line, or a translated fallback with the exit code when the command wrote nothing to stderr.
-- **Lines 279-290, `startFastPoll()`:** sets the end of the fast period and moves each status check's next run forward. `checkStatus()` then keeps using the short interval until the period ends.
-- **Lines 292-294, tooltip:** `i18nc("context", "%1: %2", a, b)` is `i18n` with a hint for translators; `%1` and `%2` are filled from the arguments.
-- **Lines 296-334, `applyConfig()`:** returns early if the config string is the one already parsed. Otherwise it parses, logs each warning with `console.warn` (visible in `journalctl`), keeps only the states of servers and functions that still exist, drops all inline results, clears the bookkeeping so every status function is checked on the next timer tick, and reads the toggles that are available.
-- **Lines 336-344:** `Component.onCompleted` and `Connections` \[13\] call `applyConfig()` at startup and on every change of the `servers` key.
-- **Lines 346-350, `onExpandedChanged`:** a property-change handler \[6\] that refreshes everything, toggles included, when the popup opens.
-- **Lines 352-358:** the two representations, each handed a reference to `root` (Part 2).
-- **Lines 360-362:** one `CommandRunner` instance, named `runner` \[8\]. It isn't visual; a `PlasmoidItem` can hold non-visual children.
-- **Lines 364-383, `Timer`:** one timer ticking every second, instead of one per status function. Each function's next check time is stored in `_nextCheck`, so functions can have different intervals and can run faster after Wake. Each tick also calls `expireResults()`. Inside the handler, the code writes `root.serverList` and `root.checkStatus` with the id: inside a child object, being explicit avoids confusion with the Timer's own properties.
+- **Lines 61-84, `stateText()`, `commandFor()` and `functionName()`:** `stateText()` and `functionName()` are translated labels. `i18n()` is Plasma's translation function; every user-visible string goes through it. `commandFor()` fills in a command's placeholders with the SSH options from the General settings; every command the widget runs, and the one the confirmation dialog shows, goes through it.
+- **Lines 86-122, setters:** `setServerState()`, `setFunctionState()` and `setRunning()` use the copy-and-assign pattern. `setServerState()` also reads the toggles when a server comes online.
+- **Lines 124-148, `checkStatus()`:** see Part 3, step 3.
+- **Lines 150-166, `readToggle()`:** runs `stateCommand`. Exit 0 means on, other codes off, a timeout `"unknown"`. The optional `done` callback runs whenever the command finishes, even when the result is dropped, so whoever passed it can always clean up.
+- **Lines 168-179, `retryToggle()`:** what a click on a toggle in the `"unknown"` state does: it reads the state again instead of switching, since without the current state the click has no clear meaning. It marks the toggle as running for the read, so the switch shows the spinner, and passes `done` to clear the mark. It doesn't count up `actionsRunning`: a read changes nothing on the server.
+- **Lines 181-207, `refreshToggles()`, `refreshServer()`, `refreshAll()`:** toggles are never polled, only read on these occasions. `refreshToggles()` skips toggles that are running or unavailable, e.g. an SSH check while the server is off.
+- **Lines 209-243, `runFunction()`:** see "A click, start to finish". `finish` is an arrow function stored in a `const` and passed as a callback to one of two `runner.run()` calls. The verify call wraps it in another arrow function, `verifyResult => finish(verifyResult, true)`, to pass the extra argument. It always counts down, even after a config change, so `actionsRunning` can't get stuck.
+- **Lines 245-260, `setResult()`:** stores `ok`, the error line, the full stderr and the time the result expires (`expiresAt`). It is replaced by the next result of the same function.
+- **Lines 262-275, `expireResults()`:** called by the timer. Removes every result whose `expiresAt` has passed. `next` stays `null` until something changes, so most ticks assign nothing and no binding re-evaluates.
+- **Lines 277-284, `resultText()`:** the error line, or a translated fallback with the exit code when the command wrote nothing to stderr.
+- **Lines 286-298, `startFastPoll()`:** sets the end of the fast period and moves each status check's next run forward. `checkStatus()` then keeps using the short interval until the period ends.
+- **Lines 300-302, tooltip:** `i18nc("context", "%1: %2", a, b)` is `i18n` with a hint for translators; `%1` and `%2` are filled from the arguments.
+- **Lines 304-342, `applyConfig()`:** returns early if the config string is the one already parsed. Otherwise it parses, logs each warning with `console.warn` (visible in `journalctl`), keeps only the states of servers and functions that still exist, drops all inline results, clears the bookkeeping so every status function is checked on the next timer tick, and reads the toggles that are available.
+- **Lines 344-362:** `Component.onCompleted` and `Connections` \[13\] call `applyConfig()` at startup and on every change of the `servers` key. When the default interval or the SSH options change, the handlers clear `_nextCheck`, so the timer runs every status check on its next tick with the new settings instead of waiting for checks scheduled with the old interval.
+- **Lines 364-368, `onExpandedChanged`:** a property-change handler \[6\] that refreshes everything, toggles included, when the popup opens.
+- **Lines 370-376:** the two representations, each handed a reference to `root` (Part 2).
+- **Lines 378-380:** one `CommandRunner` instance, named `runner` \[8\]. It isn't visual; a `PlasmoidItem` can hold non-visual children.
+- **Lines 382-401, `Timer`:** one timer ticking every second, instead of one per status function. Each function's next check time is stored in `_nextCheck`, so functions can have different intervals and can run faster after Wake. Each tick also calls `expireResults()`. Inside the handler, the code writes `root.serverList` and `root.checkStatus` with the id: inside a child object, being explicit avoids confusion with the Timer's own properties.
 
 ### CommandRunner.qml
 
@@ -493,15 +505,15 @@ The panel icon. The root is a `MouseArea`, an invisible item that receives click
 
 The popup.
 
-- **Line 11, `PlasmaExtras.Representation`:** a popup container with `header` and `contentItem` slots, so the heading and list get the standard Plasma look.
-- **Lines 16-19, `Layout.*` sizes:** tell Plasma how big the popup may be, in grid units (multiples of the font size).
-- **Line 21, `collapseMarginsHint`:** lets the list run to the popup's edges instead of sitting inside a margin.
-- **Lines 23-31, `activate()`:** where every click on a function ends up. It opens the confirmation dialog if the function has `confirm` set, otherwise runs it right away.
-- **Lines 33-55, header:** a `RowLayout` with a heading that takes all spare width (`Layout.fillWidth`) and a refresh button. The button has `text` even though it shows only an icon (`display: IconOnly`); the text is used by screen readers and by its own tooltip (`ToolTip.text: text`). `ToolTip.*` are attached properties \[11\].
-- **Lines 57-101, list:** a `ScrollView` around a `ListView` \[9\]. `width: ListView.view.width` is an attached property that makes each row as wide as the list. `clip: true` stops rows from drawing outside the list while scrolling. `onFunctionActivated` (line 83) receives the signal from a server row \[16\]; `modelData` there is the row's server.
-- **Lines 65-78, config warning:** the list's `header` is an inline `Component` \[14\], set only when `configWarnings` isn't empty. `Kirigami.InlineMessage` is hidden by default, hence `visible: true`. It doesn't list the problems, which are English developer messages; it points to the log.
-- **Lines 86-99, `PlaceholderMessage`:** a child of the ListView, centred on it, shown only when `list.count === 0`, which is the case with the default config `[]`. Its `helpfulAction` is a button under the message. It triggers Plasma's own "configure" action (`Plasmoid.internalAction("configure")`), the same one as "Configure…" in the context menu, which opens the settings dialog.
-- **Lines 103-130, `confirmDialog`:** a `Kirigami.PromptDialog` \[19\]. `server`, `fn` and `turnOn` are set by `ask()`; `title` and `subtitle` are bindings on them, so the text is right the moment the dialog opens. The subtitle shows the exact command after placeholder substitution. `preferredWidth` keeps the dialog narrower than the popup.
+- **Line 9, `PlasmaExtras.Representation`:** a popup container with `header` and `contentItem` slots, so the heading and list get the standard Plasma look.
+- **Lines 14-17, `Layout.*` sizes:** tell Plasma how big the popup may be, in grid units (multiples of the font size).
+- **Line 19, `collapseMarginsHint`:** lets the list run to the popup's edges instead of sitting inside a margin.
+- **Lines 21-29, `activate()`:** where every click on a function ends up. It opens the confirmation dialog if the function has `confirm` set, otherwise runs it right away.
+- **Lines 31-53, header:** a `RowLayout` with a heading that takes all spare width (`Layout.fillWidth`) and a refresh button. The button has `text` even though it shows only an icon (`display: IconOnly`); the text is used by screen readers and by its own tooltip (`ToolTip.text: text`). `ToolTip.*` are attached properties \[11\].
+- **Lines 55-99, list:** a `ScrollView` around a `ListView` \[9\]. `width: ListView.view.width` is an attached property that makes each row as wide as the list. `clip: true` stops rows from drawing outside the list while scrolling. `onFunctionActivated` (line 83) receives the signal from a server row \[16\]; `modelData` there is the row's server.
+- **Lines 63-76, config warning:** the list's `header` is an inline `Component` \[14\], set only when `configWarnings` isn't empty. `Kirigami.InlineMessage` is hidden by default, hence `visible: true`. It doesn't list the problems, which are English developer messages; it points to the log.
+- **Lines 84-97, `PlaceholderMessage`:** a child of the ListView, centred on it, shown only when `list.count === 0`, which is the case with the default config `[]`. Its `helpfulAction` is a button under the message. It triggers Plasma's own "configure" action (`Plasmoid.internalAction("configure")`), the same one as "Configure…" in the context menu, which opens the settings dialog.
+- **Lines 101-128, `confirmDialog`:** a `Kirigami.PromptDialog` \[19\]. `server`, `fn` and `turnOn` are set by `ask()`; `title` and `subtitle` are bindings on them, so the text is right the moment the dialog opens. The subtitle shows the exact command after placeholder substitution. `preferredWidth` keeps the dialog narrower than the popup.
 
 ### ServerDelegate.qml
 
@@ -539,46 +551,54 @@ The ✓ or ✗ after a command. A file of its own because the button and the swi
 
 ### config/config.qml
 
-The settings dialog's page list (Part 2, "Settings pages"). One page so far; the General page comes later in phase 3.
+The settings dialog's page list (Part 2, "Settings pages"): "Servers" first, then "General".
+
+### ConfigGeneral.qml
+
+The "General" settings page: settings that apply to all servers. Every control is bound to a `cfg_` property and writes it directly (Part 2). There is no copy to manage, unlike `ConfigServers.qml`.
+
+- **Default check interval:** used by status functions without their own `interval`.
+- **SSH options:** what `{ssh}` puts between `ssh` and `user@host`. Below the field, `Commands.sshCommand()` shows the result for a made-up server. A warning appears when the options lack `BatchMode=yes` (`Commands.hasBatchMode()`): without it, ssh asks for a password that nobody can type in, and the command just waits for its timeout.
+- **`cfg_servers`, `cfg_serversDefault`:** declared only to avoid log warnings (Part 2).
 
 ### ConfigServers.qml
 
 The "Servers" settings page. It edits a parsed copy of the config and writes it back as JSON to `cfg_servers` on every change (Part 2).
 
-- **Lines 19-20, `cfg_servers`, `cfg_serversDefault`:** set by Plasma; see Part 2.
-- **Lines 22-30, page state:** `servers` is the list being edited, parsed with the same `Model.parseServers()` as the widget, so the page sees exactly what the popup shows. The selection is two indexes; `currentServer` and `currentFunction` are bindings on them \[4\], `null` when nothing is selected.
-- **Lines 34-50, `load()` and `_written`:** `load()` parses `cfg_servers`, at start and whenever `cfg_servers` changes from *outside*, e.g. through the Defaults button. The page's own writes change `cfg_servers` too; `_written` holds the last JSON the page wrote, so `onCfg_serversChanged` can tell the two apart.
-- **Lines 52-58, `edit(change)`:** every change goes through here. It copies the list (`Model.copyServers()`), lets the arrow function passed as `change` modify the copy, then assigns the copy to `servers` and its JSON to `cfg_servers`. The same copy-and-assign pattern as in `main.qml` \[4\]: mutating `servers` in place would not update any binding.
-- **Lines 60-130, edit functions:** one per button or field: add, remove and move servers and functions, set a field, change a function's type. After a move or remove, they fix the selection so it stays on the same item (`indexAfterMove()`). They are small on purpose; the rules live in `model.js`.
-- **Lines 147-151, `primaryStatusId`:** the id of the current server's first status function. The function list labels that one "Online state" instead of "Status", because it is the server's dot in the popup, not a control. Compared by id, not by object: a JS array used as a Repeater model may hand its delegates copies of the objects.
-- **Lines 154-159, `ListToolButton`:** an inline type \[21\].
-- **Lines 164-171, `InlineMessage`:** shown when parsing the saved config skipped or fixed something. Applying writes the cleaned-up list, so the message says so.
-- **Lines 177-256, server list:** a `Repeater` \[15\] of `ItemDelegate`s, standard clickable list rows; `highlighted` marks the selected one. Below it Add, Move up, Move down and Remove.
-- **Lines 258-271, `PlaceholderMessage`:** instead of the form while there are no servers.
-- **Lines 273-428, server form:** a `Kirigami.FormLayout` \[20\] with the server fields, then the "Functions" section. Each function row is an `ItemDelegate` whose `contentItem` is replaced by a `RowLayout` with icon, name, type and three tool buttons. "Add Function" opens a `QQC2.Menu` with the three types; `popup(button, 0, height)` places it under the button.
-- **Lines 430-443, `FunctionEditor`:** the form for the selected function. While nothing is selected it is hidden and gets a dummy `fn`, so its bindings never read from `null`. Its signals call `setFunctionField()` and `setFunctionType()`.
+- **Lines 18-25, `cfg_` properties:** set by Plasma; see Part 2. The page edits `cfg_servers` and only reads `cfg_defaultInterval` and `cfg_sshOptions`, to pass them to the function editor.
+- **Lines 27-35, page state:** `servers` is the list being edited, parsed with the same `Model.parseServers()` as the widget, so the page sees exactly what the popup shows. The selection is two indexes; `currentServer` and `currentFunction` are bindings on them \[4\], `null` when nothing is selected.
+- **Lines 39-55, `load()` and `_written`:** `load()` parses `cfg_servers`, at start and whenever `cfg_servers` changes from *outside*, e.g. through the Defaults button. The page's own writes change `cfg_servers` too; `_written` holds the last JSON the page wrote, so `onCfg_serversChanged` can tell the two apart.
+- **Lines 57-63, `edit(change)`:** every change goes through here. It copies the list (`Model.copyServers()`), lets the arrow function passed as `change` modify the copy, then assigns the copy to `servers` and its JSON to `cfg_servers`. The same copy-and-assign pattern as in `main.qml` \[4\]: mutating `servers` in place would not update any binding.
+- **Lines 65-141, edit functions:** one per button or field: add, remove and move servers and functions, set a field, change a function's type. After a move or remove, they fix the selection so it stays on the same item (`indexAfterMove()`). They are small on purpose; the rules live in `model.js`.
+- **Lines 158-162, `primaryStatusId`:** the id of the current server's first status function. The function list labels that one "Online/Server state" instead of "Status", because it is the server's dot in the popup, not a control. Compared by id, not by object: a JS array used as a Repeater model may hand its delegates copies of the objects.
+- **Lines 165-170, `ListToolButton`:** an inline type \[21\].
+- **Lines 175-182, `InlineMessage`:** shown when parsing the saved config skipped or fixed something. Applying writes the cleaned-up list, so the message says so.
+- **Lines 188-267, server list:** a `Repeater` \[15\] of `ItemDelegate`s, standard clickable list rows; `highlighted` marks the selected one. Below it Add, Move up, Move down and Remove.
+- **Lines 269-282, `PlaceholderMessage`:** instead of the form while there are no servers.
+- **Lines 284-439, server form:** a `Kirigami.FormLayout` \[20\] with the server fields, then the "Functions" section. Each function row is an `ItemDelegate` whose `contentItem` is replaced by a `RowLayout` with icon, name, type and three tool buttons. "Add Function" opens a `QQC2.Menu` with the three types; `popup(button, 0, height)` places it under the button.
+- **Lines 441-456, `FunctionEditor`:** the form for the selected function. While nothing is selected it is hidden and gets a dummy `fn`, so its bindings never read from `null`. Its signals call `setFunctionField()` and `setFunctionType()`.
 
 ### FunctionEditor.qml
 
 The form for one function. Like `FunctionControl.qml`, one file for all three types: fields of other types have `visible: false` and take no space.
 
-- **Lines 13-19, interface:** the function and server come in as properties; edits go out as signals \[16\]. The editor never changes `fn`, so all the data handling stays in `ConfigServers.qml`.
-- **Lines 26-28, `indexOf()`:** the `ComboBox` models are arrays of `{ value, text }`. `textRole` and `valueRole` tell the ComboBox which field to show and which to report as `currentValue`; `indexOf()` finds the entry to show for a stored value.
-- **Lines 38-50, type:** `onActivated` runs only on a user choice, not when `currentIndex` changes through its binding. The page then calls `Model.changeFunctionType()`.
-- **Lines 64-99, icon:** a button with the current icon that opens `KIconThemes.IconDialog` (`import org.kde.iconthemes`), KDE's icon picker, and a text field for typing a name. The dialog reports a choice by changing its `iconName`. The button sets `iconName` to the current icon before opening, so picking any other icon is a change; `settingUp` makes the handler ignore that preparatory change.
-- **Lines 106-162, commands:** one `CommandField` per command. The labels change with the type, e.g. "Check:" for a status function and "Command:" for an action.
-- **Lines 164-212, behavior:** "Available", "Ask for confirmation" (not for status functions), the check interval (only for status functions) and the timeout. `SpinBox` holds integers; `textFromValue` adds the unit, and `valueFromText` reads a typed number back.
+- **Lines 13-22, interface:** the function, the server and the two General settings come in as properties; edits go out as signals \[16\]. The editor never changes `fn`, so all the data handling stays in `ConfigServers.qml`.
+- **Lines 29-31, `indexOf()`:** the `ComboBox` models are arrays of `{ value, text }`. `textRole` and `valueRole` tell the ComboBox which field to show and which to report as `currentValue`; `indexOf()` finds the entry to show for a stored value.
+- **Lines 41-53, type:** `onActivated` runs only on a user choice, not when `currentIndex` changes through its binding. The page then calls `Model.changeFunctionType()`.
+- **Lines 67-102, icon:** a button with the current icon that opens `KIconThemes.IconDialog` (`import org.kde.iconthemes`), KDE's icon picker, and a text field for typing a name. The dialog reports a choice by changing its `iconName`. The button sets `iconName` to the current icon before opening, so picking any other icon is a change; `settingUp` makes the handler ignore that preparatory change.
+- **Lines 109-170, commands:** one `CommandField` per command. The labels change with the type, e.g. "Check:" for a status function and "Command:" for an action.
+- **Lines 172-238, behavior:** "Available", "Ask for confirmation" (not for status functions), the check interval (only for status functions) and the timeout. `SpinBox` holds integers; `textFromValue` adds the unit, and `valueFromText` reads a typed number back. The check interval has a "Default" check box: checked means the function has no `interval` of its own and uses the General default, which the disabled spin box shows. Checking it sends `fieldEdited("interval", undefined)`, and `setFunctionField()` in `ConfigServers.qml` deletes the field.
 
 ### CommandField.qml
 
-One command in the function editor: a monospace text field, the command as it will run on this server (`Commands.substitute()`, the same function the widget uses), and a warning line. The warning names unknown placeholders, like a typo `{hots}`, and placeholders whose server field is empty, like `{mac}` without a MAC address. The root is a `ColumnLayout`, so the three parts stack and the whole thing is one field in the `FormLayout` \[20\].
+One command in the function editor: a monospace text field, the command as it will run on this server (`Commands.substitute()`, the same function the widget uses, with the SSH options from the General page), and a warning line. The warning names unknown placeholders, like a typo `{hots}`, and placeholders whose server field is empty, like `{mac}` without a MAC address. The root is a `ColumnLayout`, so the three parts stack and the whole thing is one field in the `FormLayout` \[20\].
 
 ### code/model.js
 
 Pure data helpers, no QML \[12\]. Turns the `servers` config string into objects the UI can trust: every field it reads exists and has the right type.
 
 - **`parseServers(text)`:** the entry point. Never throws; returns `{ servers, warnings }`. Empty text is a valid empty config. Text that isn't JSON, or JSON that isn't a list, gives no servers and one warning. Otherwise each entry goes through `normalizeServer()`, and entries that come back `null` are skipped.
-- **`normalizeServer()` and `normalizeFunction()`:** copy the raw object with `Object.assign({}, raw)` first, so unknown fields like `tailscaleHost` survive, then overwrite the known fields with checked values. A function with an unknown `type` is skipped. Missing fields get defaults: `timeout` 10, `interval` 30, `availableWhen` `"always"`, `confirm` `false`, an icon per type. A server without a name shows its host.
+- **`normalizeServer()` and `normalizeFunction()`:** copy the raw object with `Object.assign({}, raw)` first, so unknown fields like `tailscaleHost` survive, then overwrite the known fields with checked values. A function with an unknown `type` is skipped. Missing fields get defaults: `timeout` 10, `availableWhen` `"always"`, `confirm` `false`, an icon per type. A status function's `interval` is optional: without a valid one, the field is left out and the General default applies (`statusInterval()`). A server without a name shows its host.
 - **`uniqueId()`:** a missing or duplicate id is replaced by one built from the position, like `server-2` or `nas-fn-1`. Not random, so the same config gives the same ids every time and `serverStates` survives a re-parse.
 - **`asSeconds()`, `asString()`, `oneOf()`:** small type checks with a fallback. `asSeconds("30")` accepts a numeric string; `0`, negatives and `true` fall back.
 - **`serializeServers(servers)`:** `JSON.stringify` for writing the config; the settings page uses it.
@@ -587,7 +607,8 @@ Pure data helpers, no QML \[12\]. Turns the `servers` config string into objects
 - **`functionKey(server, fn)`:** `"<serverId>/<functionId>"`, the key for `functionStates`, `runningFunctions` and `functionResults`.
 - **`unavailableReason(fn, server, serverState)`:** `""` if the function can run now, otherwise `"needsOnline"`, `"needsOffline"` or `"unknown"` (status not checked yet). It returns codes, not sentences, because `.pragma library` files have no `i18n()`; `FunctionControl.qml` translates them.
 - **`changesOnlineState(fn)`:** true for an action that runs only online or only offline, like Wake or Power off. Only these start faster polling; an action available `always` is not expected to change the online state.
-- **`checkInterval(fn, fastPollUntil, now)`:** the function's own `interval`, or 5 s (`FAST_POLL_INTERVAL`) while the fast period lasts. A function whose interval is already shorter keeps it.
+- **`statusInterval(fn, defaultInterval)`:** the function's own `interval`, or the default check interval from the General settings. A status function has no `interval` field unless one was set: `normalizeFunction()` drops a missing or invalid one.
+- **`checkInterval(fn, defaultInterval, fastPollUntil, now)`:** `statusInterval()`, or 5 s (`FAST_POLL_INTERVAL`) while the fast period lasts. A function whose interval is already shorter keeps it.
 - **Constants:** `FAST_POLL_DURATION` (120 s), `RESULT_OK_SECONDS` (3), and `RESULT_FAIL_SECONDS` (10). QML reads them like functions, e.g. `Model.RESULT_OK_SECONDS`.
 - **Editing helpers** (used by `ConfigServers.qml`): `copyServers()` makes a deep copy through JSON. `newId()` makes a random id like `fn-k3j9x0ab` that isn't used yet. `newServer()` and `newFunction()` create entries with defaults; their names come from the caller, because `i18n()` doesn't exist here. `changeFunctionType()` keeps name, icon, timeout, unknown fields and the fields both types share (`command` from status to action; `availableWhen` and `confirm` from action to toggle), drops the fields only the old type used, and fills in the new type's defaults through `normalizeFunction()`. `moveItem()` moves one entry of an array in place.
 
@@ -596,9 +617,9 @@ Pure data helpers, no QML \[12\]. Turns the `servers` config string into objects
 Turns a command template into a safe shell string.
 
 - **`shellQuote(value)`:** values like hosts or names are inserted into a shell command, so a name containing a space or `;` must not break it or run something extra. Values made only of safe characters (letters, digits, `.`, `-`, `@`, …) are left as is. Anything else is wrapped in single quotes; a single quote inside is written `'\''` (end the quote, an escaped quote, start a new quote), the standard POSIX trick.
-- **`sshCommand(server)`:** builds `ssh -o BatchMode=yes -o ConnectTimeout=5 user@host`. `BatchMode=yes` makes ssh fail instead of asking for a password, which would hang forever with no terminal.
-- **`placeholderValues(server)`:** the map of `{name}` → value. `ssh` is not quoted again, because it is already a complete, quoted command.
-- **`substitute(command, server)`:** the regex `\{(\w+)\}` finds every `{word}`. For each, the replace callback returns the value if the key is known, else the original text, so unknown placeholders stay visible. `hasOwnProperty.call` avoids matching built-in object keys like `{constructor}`.
+- **`sshCommand(server, sshOptions)`:** builds `ssh <sshOptions> user@host`, by default `ssh -o BatchMode=yes -o ConnectTimeout=5 user@host`. The options are the General setting, inserted as typed and not quoted, because they are several shell words. `BatchMode=yes` makes ssh fail instead of asking for a password, which would hang forever with no terminal; `hasBatchMode()` checks for it so the settings can warn.
+- **`placeholderValues(server, sshOptions)`:** the map of `{name}` → value. `ssh` is not quoted again, because it is already a complete, quoted command.
+- **`substitute(command, server, sshOptions)`:** the regex `\{(\w+)\}` finds every `{word}`. For each, the replace callback returns the value if the key is known, else the original text, so unknown placeholders stay visible. `hasOwnProperty.call` avoids matching built-in object keys like `{constructor}`.
 - **`withTimeout(command, seconds)`:** `timeout -k 2 10 sh -c '<command>'`. `sh -c` runs the whole command, pipes and all, as one unit that `timeout` can stop. `-k 2` sends a hard kill 2 s later if the command ignores the polite stop.
 - **`isTimeoutExit(code)`:** `timeout` exits with 124 after a normal stop and 137 after a kill.
 - **`errorLine(stderr)`:** the last non-empty line of the error output, for the inline message. Tools like ssh print warnings first and the real error last.
@@ -614,7 +635,7 @@ The automatic load test, written in Bash, not QML.
 
 - **`Containerfile`:** a Fedora 44 image with the Plasma 6 packages, `plasmoidviewer`, a virtual X screen (`Xvfb`) and dbus.
 - **`entrypoint.sh`:** runs inside the container. Starts Xvfb, runs `plasmoidviewer` on the mounted package for 15 s, then searches the log for lines that mention `/package/` or applet load errors. Fails if it finds any, or if `plasmoidviewer` quit early.
-- **`page-harness.qml`:** used by `load-test.sh --page NAME`. `plasmoidviewer` never opens the settings dialog, so a broken settings page would pass the normal test. The harness replaces `main.qml` in a copy of the package with a widget that loads the page with a `Loader`, sets `cfg_servers` like Plasma does, and then calls the page's edit functions one per timer tick: select every function, add a server and functions, change a type, move and remove. Errors on the way show up in the report. With `--screenshots DIR`, `grabToImage()` saves a PNG after each step.
+- **`page-harness.qml`:** used by `load-test.sh --page NAME`. `plasmoidviewer` never opens the settings dialog, so a broken settings page would pass the normal test. The harness replaces `main.qml` in a copy of the package with a widget that loads the page with a `Loader`, sets a `cfg_` property for every config key like Plasma does, and then calls the page's edit functions one per timer tick: select every function, add a server and functions, set and clear an interval, change a type, move and remove. For the General page, it sets the SSH options and the interval instead. Errors on the way show up in the report. With `--screenshots DIR`, `grabToImage()` saves a PNG after each step.
 - **`load-test.sh`:** runs on your machine. Builds the image if needed and starts the container with `--network none` and the package mounted read-only. `--self-test` swaps in a broken `main.qml` to prove the test catches errors. `--servers FILE` loads the widget with a test config: `plasmoidviewer` throws away a preset applet config, so the script copies the package and puts the file's content in as the default of the `servers` key in `main.xml`.
 
 ## Glossary and further reading
