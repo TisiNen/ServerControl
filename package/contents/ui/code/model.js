@@ -327,3 +327,87 @@ function moveItem(list, from, to) {
     list.splice(to, 0, list.splice(from, 1)[0]);
     return true;
 }
+
+// ---------------------------------------------------------------------------
+// Import and export of the whole setup, used by the General settings page.
+// Format: { "version": 1, "general": { defaultInterval, sshOptions },
+// "servers": [ ... ] }. Import also accepts a bare server list.
+
+const SETUP_VERSION = 1;
+
+// The whole setup as indented JSON text. `servers` is a parsed list,
+// `general` holds the General settings.
+function exportSetup(servers, general) {
+    return JSON.stringify({ version: SETUP_VERSION, general: general, servers: servers }, null, 2);
+}
+
+// The known General settings in `raw`, checked. Invalid or unknown ones
+// are left out with a warning.
+function parseGeneral(raw, warnings) {
+    if (!isPlainObject(raw)) {
+        warnings.push("`general` is not an object, ignored");
+        return null;
+    }
+    const general = {};
+    for (const key in raw) {
+        const value = raw[key];
+        if (key === "defaultInterval" && asSeconds(value, 0) > 0) {
+            // The config key is an integer.
+            general.defaultInterval = Math.max(1, Math.round(asSeconds(value, 0)));
+        } else if (key === "sshOptions" && typeof value === "string") {
+            general.sshOptions = value;
+        } else if (key === "defaultInterval" || key === "sshOptions") {
+            warnings.push("general." + key + ": invalid value " + JSON.stringify(value) + ", ignored");
+        } else {
+            warnings.push("general." + key + ": unknown setting, ignored");
+        }
+    }
+    return general;
+}
+
+// Reads an exported setup or a bare server list. Never throws.
+// Returns { error, detail, servers, general, warnings }:
+// - `error` is "" or a code the UI translates: "invalidJson" (`detail`:
+//   the parser's message), "unsupportedVersion" (`detail`: the version) or
+//   "noServerList".
+// - `servers` is parsed like the config, by parseServers().
+// - `general` holds the valid General settings found, or null if the text
+//   has none (a bare list, or no `general` key).
+// - `warnings` are English developer messages, as from parseServers().
+function parseSetup(text) {
+    const result = { error: "", detail: "", servers: [], general: null, warnings: [] };
+    let data;
+    try {
+        data = JSON.parse(text);
+    } catch (e) {
+        result.error = "invalidJson";
+        result.detail = e.message;
+        return result;
+    }
+
+    let list = null;
+    if (Array.isArray(data)) {
+        list = data;
+    } else if (isPlainObject(data)) {
+        if (data.version !== undefined && Number(data.version) !== SETUP_VERSION) {
+            result.error = "unsupportedVersion";
+            result.detail = String(data.version);
+            return result;
+        }
+        if (Array.isArray(data.servers)) {
+            list = data.servers;
+        }
+        if (data.general !== undefined) {
+            result.general = parseGeneral(data.general, result.warnings);
+        }
+    }
+    if (list === null) {
+        result.error = "noServerList";
+        return result;
+    }
+
+    const parsed = parseServers(JSON.stringify(list));
+    result.servers = parsed.servers;
+    result.warnings = result.warnings.concat(parsed.warnings);
+    return result;
+}

@@ -4,7 +4,7 @@ Nov 4, 2026 · @Tilo
 
 ## How to read this guide
 
-This guide teaches QML using only the Server Control widget as it stands after the second step of phase 3 (on top of phase 2's config model, function types, confirmation dialog and inline feedback: the settings pages "Servers" and "General"): 16 source files, about 2330 lines. Read Part 1 first, then follow a status check and a click through the code in Part 3; the per-file notes in Part 4 are for looking things up.
+This guide teaches QML using only the Server Control widget as it stands after the third step of phase 3 (on top of phase 2's config model, function types, confirmation dialog and inline feedback: the settings pages "Servers" and "General", with import and export of the whole setup): 16 source files, about 2530 lines. Read Part 1 first, then follow a status check and a click through the code in Part 3; the per-file notes in Part 4 are for looking things up.
 
 | File | Lines | Language | What it is |
 | --- | --- | --- | --- |
@@ -20,9 +20,9 @@ This guide teaches QML using only the Server Control widget as it stands after t
 | `package/contents/ui/ResultIcon.qml` | 14 | QML | The ✓ or ✗ shown after a command |
 | `package/contents/ui/ConfigServers.qml` | 458 | QML | Settings page "Servers": server list, server fields, function list |
 | `package/contents/ui/FunctionEditor.qml` | 240 | QML | Settings form for one function, with fields per type |
-| `package/contents/ui/ConfigGeneral.qml` | 87 | QML | Settings page "General": default check interval and SSH options |
+| `package/contents/ui/ConfigGeneral.qml` | 209 | QML | Settings page "General": default check interval, SSH options, import and export |
 | `package/contents/ui/CommandField.qml` | 70 | QML | Settings field for one command, with preview and placeholder warnings |
-| `package/contents/ui/code/model.js` | 329 | JavaScript | Parses and validates the `servers` config JSON; availability and polling rules; editing helpers |
+| `package/contents/ui/code/model.js` | 413 | JavaScript | Parses and validates the `servers` config JSON; availability and polling rules; editing helpers; import and export |
 | `package/contents/ui/code/commands.js` | 105 | JavaScript | Placeholder substitution, shell quoting, timeout wrapping, error lines, placeholder checks |
 
 If you know JavaScript, you already know half of QML: everything inside `function`, `{ … }` property expressions and `on…` handlers is ordinary JavaScript. The new part is the declarative layer around it, which Part 1 covers.
@@ -275,6 +275,19 @@ Kirigami.FormLayout {
 ```
 
 When the window is too narrow (`wideMode` false), the labels move above the fields. Two forms on one page line up when one lists the other in `twinFormLayouts`, as the function editor does with the server form. One trap: a `Label` with `wrapMode` reports its *unwrapped* text width as `implicitWidth`, which can push the whole form out of wide mode. The settings files give such labels a small `Layout.preferredWidth` together with `Layout.fillWidth: true`.
+
+A second trap is the height of a `ScrollView`. Its implicit height is the height of everything inside it, and the form sizes it by that, even with `Layout.preferredHeight` set. The import text area in `ConfigGeneral.qml` then grew over the buttons below it. Setting the height itself fixes it:
+
+```qml
+QQC2.ScrollView {
+    implicitHeight: Kirigami.Units.gridUnit * 14
+    clip: true
+
+    QQC2.TextArea { id: jsonArea; … }
+}
+```
+
+`clip: true` cuts off whatever is scrolled out of view; without it, the text would still draw outside the box.
 
 `onTextEdited` fires only when the user types, not when `text` changes through its binding. That keeps the binding \[4\] in place: the page writes the new value into its data, and the binding reads the same value back.
 
@@ -555,11 +568,16 @@ The settings dialog's page list (Part 2, "Settings pages"): "Servers" first, the
 
 ### ConfigGeneral.qml
 
-The "General" settings page: settings that apply to all servers. Every control is bound to a `cfg_` property and writes it directly (Part 2). There is no copy to manage, unlike `ConfigServers.qml`.
+The "General" settings page: settings that apply to all servers, and import and export of the whole setup. Every control is bound to a `cfg_` property and writes it directly (Part 2). There is no copy to manage, unlike `ConfigServers.qml`.
 
 - **Default check interval:** used by status functions without their own `interval`.
 - **SSH options:** what `{ssh}` puts between `ssh` and `user@host`. Below the field, `Commands.sshCommand()` shows the result for a made-up server. A warning appears when the options lack `BatchMode=yes` (`Commands.hasBatchMode()`): without it, ssh asks for a password that nobody can type in, and the command just waits for its timeout.
-- **`cfg_servers`, `cfg_serversDefault`:** declared only to avoid log warnings (Part 2).
+- **`cfg_servers`, `cfg_serversDefault`:** only written by an import. Declaring every key also avoids log warnings (Part 2).
+- **Lines 30-36, `showCurrentSetup()`:** fills the text area with `Model.exportSetup()`: the servers as parsed from `cfg_servers`, and the two settings. `Component.onCompleted` (line 75) calls it, so the current setup shows when the page opens. It reads the `cfg_` properties, not the saved config, so after an import it shows what Apply would save.
+- **Lines 40-73, `importText()`:** `Model.parseSetup()` does the checking and returns an error code or the result. On an error, only the message changes. Otherwise it assigns `cfg_servers` and each general setting the text contained. The spin box and text field above are bound to those properties \[4\], so they show the imported values at once, and Apply enables. The message is built from several translated sentences, each added only when it applies.
+- **Lines 152-167, text area:** a `TextArea` inside a `ScrollView` with a fixed height (Part 1, idea 20).
+- **Lines 169-199, buttons:** "Copy" has no clipboard API to call; QML has none. Instead it selects all text in the text area, calls the text area's own `copy()`, and deselects again. "Copy" and "Import" are disabled while the text area is empty.
+- **Lines 201-207, message:** a `Kirigami.InlineMessage`, green after an import and red after an error, bound to `importMessage` and `importFailed`.
 
 ### ConfigServers.qml
 
@@ -610,6 +628,7 @@ Pure data helpers, no QML \[12\]. Turns the `servers` config string into objects
 - **`statusInterval(fn, defaultInterval)`:** the function's own `interval`, or the default check interval from the General settings. A status function has no `interval` field unless one was set: `normalizeFunction()` drops a missing or invalid one.
 - **`checkInterval(fn, defaultInterval, fastPollUntil, now)`:** `statusInterval()`, or 5 s (`FAST_POLL_INTERVAL`) while the fast period lasts. A function whose interval is already shorter keeps it.
 - **Constants:** `FAST_POLL_DURATION` (120 s), `RESULT_OK_SECONDS` (3), and `RESULT_FAIL_SECONDS` (10). QML reads them like functions, e.g. `Model.RESULT_OK_SECONDS`.
+- **`exportSetup(servers, general)` and `parseSetup(text)`** (used by `ConfigGeneral.qml`): the import and export format `{ "version": 1, "general": {…}, "servers": […] }`. `exportSetup()` is `JSON.stringify` with an indent of 2, so the text is readable. `parseSetup()` never throws. It accepts the full format or a bare server list, and returns an error code (`"invalidJson"`, `"unsupportedVersion"`, `"noServerList"`) for the page to translate, like `unavailableReason()`. Server entries go through `parseServers()`, so an import is checked exactly like the config. `parseGeneral()` keeps only the known settings with valid values and warns about the rest.
 - **Editing helpers** (used by `ConfigServers.qml`): `copyServers()` makes a deep copy through JSON. `newId()` makes a random id like `fn-k3j9x0ab` that isn't used yet. `newServer()` and `newFunction()` create entries with defaults; their names come from the caller, because `i18n()` doesn't exist here. `changeFunctionType()` keeps name, icon, timeout, unknown fields and the fields both types share (`command` from status to action; `availableWhen` and `confirm` from action to toggle), drops the fields only the old type used, and fills in the new type's defaults through `normalizeFunction()`. `moveItem()` moves one entry of an array in place.
 
 ### code/commands.js
@@ -635,7 +654,7 @@ The automatic load test, written in Bash, not QML.
 
 - **`Containerfile`:** a Fedora 44 image with the Plasma 6 packages, `plasmoidviewer`, a virtual X screen (`Xvfb`) and dbus.
 - **`entrypoint.sh`:** runs inside the container. Starts Xvfb, runs `plasmoidviewer` on the mounted package for 15 s, then searches the log for lines that mention `/package/` or applet load errors. Fails if it finds any, or if `plasmoidviewer` quit early.
-- **`page-harness.qml`:** used by `load-test.sh --page NAME`. `plasmoidviewer` never opens the settings dialog, so a broken settings page would pass the normal test. The harness replaces `main.qml` in a copy of the package with a widget that loads the page with a `Loader`, sets a `cfg_` property for every config key like Plasma does, and then calls the page's edit functions one per timer tick: select every function, add a server and functions, set and clear an interval, change a type, move and remove. For the General page, it sets the SSH options and the interval instead. Errors on the way show up in the report. With `--screenshots DIR`, `grabToImage()` saves a PNG after each step.
+- **`page-harness.qml`:** used by `load-test.sh --page NAME`. `plasmoidviewer` never opens the settings dialog, so a broken settings page would pass the normal test. The harness replaces `main.qml` in a copy of the package with a widget that loads the page with a `Loader`, sets a `cfg_` property for every config key like Plasma does, and then calls the page's edit functions one per timer tick: select every function, add a server and functions, set and clear an interval, change a type, move and remove. For the General page, it sets the SSH options and the interval, exports, clicks "Copy", and imports a bare list, a full setup and three broken texts. Errors on the way show up in the report. With `--screenshots DIR`, `grabToImage()` saves a PNG after each step.
 - **`load-test.sh`:** runs on your machine. Builds the image if needed and starts the container with `--network none` and the package mounted read-only. `--self-test` swaps in a broken `main.qml` to prove the test catches errors. `--servers FILE` loads the widget with a test config: `plasmoidviewer` throws away a preset applet config, so the script copies the package and puts the file's content in as the default of the `servers` key in `main.xml`.
 
 ## Glossary and further reading

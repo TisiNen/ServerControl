@@ -69,6 +69,27 @@ PlasmoidItem {
                 }]);
                 steps.push(["empty-options", () => page.cfg_sshOptions = ""]);
             }
+            if (typeof page.importText === "function") {
+                steps.push(["export", () => page.showCurrentSetup()]);
+                steps.push(["click-copy", () => {
+                    const button = frame.findItem(page, "copySetupButton");
+                    if (!button) {
+                        throw new Error("page-harness: copySetupButton not found");
+                    }
+                    button.clicked();
+                }]);
+                steps.push(["import-bare-list", () => page.importText(
+                    '[{"name": "Imported", "host": "h", "functions": [{"type": "status", "command": "true"}, {"type": "bogus"}]}]')]);
+                steps.push(["import-setup", () => page.importText(JSON.stringify({
+                    version: 1,
+                    general: { defaultInterval: 45, sshOptions: "-o BatchMode=yes", unknown: 1 },
+                    servers: [{ name: "A", host: "a", functions: [] }, { name: "B", host: "b", functions: [] }]
+                }))]);
+                steps.push(["export-after-import", () => page.showCurrentSetup()]);
+                steps.push(["import-version-2", () => page.importText('{"version": 2, "servers": []}')]);
+                steps.push(["import-invalid", () => page.importText("{ not json")]);
+                steps.push(["import-no-list", () => page.importText('{"general": {}}')]);
+            }
             if (typeof page.selectServer !== "function") {
                 return steps;
             }

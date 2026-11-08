@@ -231,6 +231,17 @@ in the settings UI. The settings also flag known placeholders whose server field
 - The **General** page also has JSON import/export of the whole setup, for backups and copying
   setups between machines. The format is `{ "version": 1, "general": {…}, "servers": [ … ] }`.
   Import also accepts a bare server list.
+  - It works through copy and paste: pure QML can't read or write files. A text area shows the
+    current setup when the page opens ("Show Current Setup" refreshes it); "Copy" copies it.
+  - `general` holds `defaultInterval` and `sshOptions`. Export writes the servers as parsed
+    (`parseServers()`), so invalid entries are fixed or left out.
+  - "Import" parses the pasted text with `parseSetup()` in `model.js` and replaces the servers,
+    plus each valid general setting it contains, in the dialog's `cfg_` properties. Apply saves,
+    Cancel discards. Server entries are checked like the config; invalid or unknown general
+    settings are left out. Each problem is logged with `console.warn`, and the message under the
+    buttons counts them.
+  - Import fails, changing nothing, if the text isn't JSON, has a `version` other than 1, or has
+    no server list. The message says which.
 
 ## Technical reference (Plasma 6)
 
@@ -357,7 +368,7 @@ Rules:
   with a `cfg_` property for every config key (as Plasma does), and calls its edit functions
   step by step (select each function, click "Choose…" for the icon, add, set and clear an
   interval, change type, move, remove; on the General page, set the SSH options and the
-  interval). Buttons the harness clicks have an `objectName`; it finds them with `findItem()`. Add `--screenshots DIR` to save a PNG per step and look at them.
+  interval, export, click "Copy", and import valid and invalid setups). Buttons the harness clicks have an `objectName`; it finds them with `findItem()`. Add `--screenshots DIR` to save a PNG per step and look at them.
   When a page's edit functions change, update the steps in the harness.
 - `console.log` output is filtered in the sandbox; use `console.warn` for temporary debug output,
   and remove it afterwards.
@@ -385,14 +396,29 @@ Work in phases. Each phase should be usable and testable on its own.
    with timeout. One server hardcoded in JS, with ping status shown as a dot.
 2. **Generic model** (done): JSON config model, all three function types, placeholders,
    confirmation dialog, inline feedback, faster polling after wake/poweroff.
-3. **Settings UI** (in progress): server and function editor (done), General page with default
-   interval and SSH options (done), templates, JSON import/export.
+3. **Settings UI** (in progress):
+   - Server and function editor (done)
+   - General page: default check interval and SSH options (done)
+   - JSON import/export (done)
+   - Templates
 4. **Later options**:
    - Panel mode: one icon for all servers vs. one dot per server in the compact view, plus a
      per-instance "show only these servers" filter.
    - Optional Plasma notifications for action results (`org.kde.notification` or
      `notify-send`), configurable per widget and/or per function.
    - Showing the next RTC wake time (`cat /sys/class/rtc/rtc0/wakealarm`) via a custom function.
+   - **Import/export with files**, next to the copy-and-paste text area on the General page.
+     - "Save to File…" and "Open File…" buttons with a `FileDialog` (`QtQuick.Dialogs`). They
+       save or fill the existing text area, so import checks, messages and Apply/Cancel stay
+       the same.
+     - Pure QML can't read or write files (`XMLHttpRequest` on `file://` is off in plasmashell),
+       so it needs commands through `CommandRunner`: `cat -- <path>` to read,
+       `printf '%s' <json> > <path>` to write, with every value shell-quoted.
+     - Needs an exception to the "no hidden commands" convention, for file commands the user
+       starts from the settings.
+     - Limits: the command is one `sh -c` argument, capped at 128 KiB on Linux. Each IO error
+       (missing file, permission, full disk) needs its own message. The sandbox can't test the
+       dialog.
    - **Tailscale support.** The user enables Tailscale on the laptop only when away from home.
      - Detection: a configurable command in the General settings (exit code 0 = active), default
        `tailscale status --json | grep -q '"BackendState": *"Running"'`. Run it together with
