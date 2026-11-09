@@ -18,6 +18,9 @@ Item {
 
     // "online" | "offline" | "" (not checked yet)
     readonly property string serverState: plasmoidItem.serverStates[modelData.id] || ""
+    // While Tailscale is active: reached at its tailscaleHost, or not at all.
+    readonly property bool viaTailscale: Model.viaTailscale(modelData, plasmoidItem.tailscaleActive)
+    readonly property bool reachable: Model.reachable(modelData, plasmoidItem.tailscaleActive)
     readonly property real dotSize: Kirigami.Units.gridUnit * 0.6
 
     implicitHeight: column.implicitHeight + Kirigami.Units.smallSpacing * 2
@@ -42,9 +45,9 @@ Item {
                 implicitHeight: implicitWidth
                 radius: width / 2
                 color: serverRow.serverState === "online" ? Kirigami.Theme.positiveTextColor
-                    : serverRow.serverState === "offline" ? Kirigami.Theme.disabledTextColor
+                    : serverRow.serverState === "offline" || !serverRow.reachable ? Kirigami.Theme.disabledTextColor
                     : "transparent"
-                border.width: serverRow.serverState === "" ? 1 : 0
+                border.width: serverRow.serverState === "" && serverRow.reachable ? 1 : 0
                 border.color: Kirigami.Theme.disabledTextColor
             }
 
@@ -58,12 +61,43 @@ Item {
                     elide: Text.ElideRight
                 }
 
-                PlasmaComponents3.Label {
+                RowLayout {
                     Layout.fillWidth: true
-                    text: serverRow.modelData.host
-                    elide: Text.ElideRight
-                    font: Kirigami.Theme.smallFont
-                    opacity: 0.7
+                    spacing: Kirigami.Units.smallSpacing
+
+                    PlasmaComponents3.Label {
+                        Layout.fillWidth: !badge.visible
+                        text: serverRow.viaTailscale ? serverRow.modelData.tailscaleHost : serverRow.modelData.host
+                        elide: Text.ElideRight
+                        font: Kirigami.Theme.smallFont
+                        opacity: 0.7
+                    }
+
+                    // "via Tailscale": a small rounded tag after the host.
+                    Rectangle {
+                        id: badge
+
+                        visible: serverRow.viaTailscale
+                        implicitWidth: badgeLabel.implicitWidth + Kirigami.Units.smallSpacing * 2
+                        implicitHeight: badgeLabel.implicitHeight
+                        radius: height / 2
+                        color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g,
+                                       Kirigami.Theme.highlightColor.b, 0.25)
+
+                        PlasmaComponents3.Label {
+                            id: badgeLabel
+
+                            anchors.centerIn: parent
+                            text: i18nc("@info badge on a server reached over Tailscale", "via Tailscale")
+                            font: Kirigami.Theme.smallFont
+                        }
+                    }
+
+                    // Takes the rest of the row while the badge shows, so
+                    // the badge sits right after the host.
+                    Item {
+                        Layout.fillWidth: badge.visible
+                    }
                 }
             }
 

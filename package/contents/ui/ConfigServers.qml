@@ -24,6 +24,10 @@ KCM.SimpleKCM {
     property int cfg_defaultIntervalDefault
     property string cfg_sshOptions
     property string cfg_sshOptionsDefault
+    property bool cfg_tailscaleEnabled
+    property bool cfg_tailscaleEnabledDefault
+    property string cfg_tailscaleCommand
+    property string cfg_tailscaleCommandDefault
 
     property var servers: []
     // Problems found when the saved config was parsed. Saving writes the
@@ -334,6 +338,18 @@ KCM.SimpleKCM {
                     }
 
                     QQC2.TextField {
+                        Kirigami.FormData.label: i18nc("@label:textbox", "Tailscale host:")
+                        Layout.fillWidth: true
+                        // Only with Tailscale support on (General page). A
+                        // host set earlier is kept while it is hidden.
+                        visible: page.cfg_tailscaleEnabled
+                        text: page.currentServer ? page.currentServer.tailscaleHost || "" : ""
+                        placeholderText: i18n("Tailscale IP or MagicDNS name; not reachable over Tailscale if empty")
+                        font.family: Kirigami.Theme.fixedWidthFont.family
+                        onTextEdited: page.setServerField("tailscaleHost", text.trim())
+                    }
+
+                    QQC2.TextField {
                         Kirigami.FormData.label: i18nc("@label:textbox", "MAC address:")
                         Layout.fillWidth: true
                         text: page.currentServer ? page.currentServer.mac : ""
@@ -551,6 +567,7 @@ KCM.SimpleKCM {
                     server: page.currentServer || {}
                     defaultInterval: page.cfg_defaultInterval
                     sshOptions: page.cfg_sshOptions
+                    tailscaleEnabled: page.cfg_tailscaleEnabled
                     primaryStatus: page.currentFunction !== null && page.currentFunction.id === page.primaryStatusId
                     onFieldEdited: (key, value) => page.setFunctionField(key, value)
                     onTypeSelected: type => page.setFunctionType(type)

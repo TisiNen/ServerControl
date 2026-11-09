@@ -17,6 +17,10 @@ KCM.SimpleKCM {
     property int cfg_defaultIntervalDefault
     property string cfg_sshOptions
     property string cfg_sshOptionsDefault
+    property bool cfg_tailscaleEnabled
+    property bool cfg_tailscaleEnabledDefault
+    property string cfg_tailscaleCommand
+    property string cfg_tailscaleCommandDefault
     // Only written by an import. Plasma passes every config key to every
     // page, and an undeclared one logs a warning.
     property string cfg_servers
@@ -30,7 +34,9 @@ KCM.SimpleKCM {
     function showCurrentSetup() {
         jsonArea.text = Model.exportSetup(Model.parseServers(cfg_servers).servers, {
             defaultInterval: cfg_defaultInterval,
-            sshOptions: cfg_sshOptions
+            sshOptions: cfg_sshOptions,
+            tailscaleEnabled: cfg_tailscaleEnabled,
+            tailscaleCommand: cfg_tailscaleCommand
         });
         importMessage = "";
     }
@@ -56,12 +62,18 @@ KCM.SimpleKCM {
         if (general.sshOptions !== undefined) {
             cfg_sshOptions = general.sshOptions;
         }
+        if (general.tailscaleEnabled !== undefined) {
+            cfg_tailscaleEnabled = general.tailscaleEnabled;
+        }
+        if (general.tailscaleCommand !== undefined) {
+            cfg_tailscaleCommand = general.tailscaleCommand;
+        }
         for (const w of setup.warnings) {
             console.warn("Server Control import:", w);
         }
 
         const parts = [i18np("Imported %1 server.", "Imported %1 servers.", setup.servers.length)];
-        if (general.defaultInterval !== undefined || general.sshOptions !== undefined) {
+        if (Object.keys(general).length > 0) {
             parts.push(i18n("The general settings in it were imported too."));
         }
         if (setup.warnings.length > 0) {
@@ -135,6 +147,55 @@ KCM.SimpleKCM {
             color: Kirigami.Theme.neutralTextColor
             font: Kirigami.Theme.smallFont
             wrapMode: Text.Wrap
+        }
+
+        Item {
+            Kirigami.FormData.isSection: true
+        }
+
+        QQC2.CheckBox {
+            Kirigami.FormData.label: i18nc("@label:checkbox", "Tailscale:")
+            text: i18nc("@option:check", "Enable Tailscale support")
+            checked: page.cfg_tailscaleEnabled
+            onToggled: page.cfg_tailscaleEnabled = checked
+        }
+
+        // The rest of the Tailscale settings show only while it is enabled.
+        RowLayout {
+            Kirigami.FormData.label: i18nc("@label:textbox", "Tailscale check:")
+            Layout.fillWidth: true
+            visible: page.cfg_tailscaleEnabled
+            spacing: Kirigami.Units.smallSpacing
+
+            QQC2.TextField {
+                Layout.fillWidth: true
+                Layout.preferredWidth: Kirigami.Units.gridUnit * 24
+                text: page.cfg_tailscaleCommand
+                placeholderText: i18n("Empty: Tailscale never counts as active")
+                font: Kirigami.Theme.fixedWidthFont
+                onTextEdited: page.cfg_tailscaleCommand = text
+            }
+
+            QQC2.ToolButton {
+                icon.name: "edit-undo"
+                text: i18nc("@action:button", "Reset to default")
+                display: QQC2.AbstractButton.IconOnly
+                enabled: page.cfg_tailscaleCommand !== page.cfg_tailscaleCommandDefault
+                onClicked: page.cfg_tailscaleCommand = page.cfg_tailscaleCommandDefault
+                QQC2.ToolTip.text: text
+                QQC2.ToolTip.visible: hovered
+                QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+            }
+        }
+
+        QQC2.Label {
+            Layout.fillWidth: true
+            Layout.preferredWidth: Kirigami.Units.gridUnit * 10
+            visible: page.cfg_tailscaleEnabled
+            text: i18n("Runs with the status checks. Exit code 0 means Tailscale is active: servers are then reached at their Tailscale host, servers without one show as not reachable, and Wake-on-LAN is disabled.")
+            font: Kirigami.Theme.smallFont
+            wrapMode: Text.Wrap
+            opacity: 0.7
         }
 
         Kirigami.Separator {

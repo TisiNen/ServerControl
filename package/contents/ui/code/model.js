@@ -2,8 +2,8 @@
 
 // The server list is stored as one JSON string in the `servers` config key.
 // parseServers() turns that string into clean objects the UI can rely on:
-// every field it reads exists and has the right type. Unknown fields (e.g.
-// `tailscaleHost`, reserved for a later phase) are kept as they are.
+// every field it reads exists and has the right type. Unknown fields are
+// kept as they are.
 
 const FUNCTION_TYPES = ["status", "action", "toggle"];
 const AVAILABLE_WHEN = ["online", "offline", "always"];
@@ -202,13 +202,47 @@ function functionKey(server, fn) {
     return server.id + "/" + fn.id;
 }
 
+// ---------------------------------------------------------------------------
+// Tailscale. While it is active (see tailscaleCommand in main.xml), servers
+// are reached at their `tailscaleHost`; servers without one can't be reached.
+
+// Whether commands for `server` go to its Tailscale host.
+function viaTailscale(server, tailscaleActive) {
+    return tailscaleActive === true && !!(server && server.tailscaleHost);
+}
+
+// False for a server without a Tailscale host while Tailscale is active.
+function reachable(server, tailscaleActive) {
+    return tailscaleActive !== true || viaTailscale(server, tailscaleActive);
+}
+
+// Whether a function uses {mac} in any of its commands. Wake-on-LAN needs
+// the local network: a broadcast doesn't cross Tailscale, and a server
+// that is off isn't in the tailnet.
+function needsLan(fn) {
+    const fields = ["command", "verifyCommand", "stateCommand", "onCommand", "offCommand"];
+    return fields.some(field => /\{mac\}/.test(String(fn[field] || "")));
+}
+
 // Why a function can't run right now, or "" if it can.
 // `serverState` is "online", "offline" or "" (not checked yet).
-// Returns "needsOnline", "needsOffline" or "unknown"; the UI translates it.
+// Returns "unreachable", "needsLan", "needsOnline", "needsOffline" or
+// "unknown"; the UI translates it.
+// While Tailscale is active, nothing runs on a server without a Tailscale
+// host, and nothing that uses {mac}.
 // A server without a status function can't be online or offline, so its
-// functions are always available.
-function unavailableReason(fn, server, serverState) {
-    if (fn.type === "status" || fn.availableWhen === "always" || !statusFunction(server)) {
+// functions are otherwise always available.
+function unavailableReason(fn, server, serverState, tailscaleActive) {
+    if (fn.type === "status") {
+        return "";
+    }
+    if (!reachable(server, tailscaleActive)) {
+        return "unreachable";
+    }
+    if (tailscaleActive === true && needsLan(fn)) {
+        return "needsLan";
+    }
+    if (fn.availableWhen === "always" || !statusFunction(server)) {
         return "";
     }
     if (serverState !== "online" && serverState !== "offline") {
@@ -325,7 +359,8 @@ function moveItem(list, from, to) {
 
 // ---------------------------------------------------------------------------
 // Import and export of the whole setup, used by the General settings page.
-// Format: { "version": 1, "general": { defaultInterval, sshOptions },
+// Format: { "version": 1, "general": { defaultInterval, sshOptions, tailscaleEnabled,
+// tailscaleCommand },
 // "servers": [ ... ] }. Import also accepts a bare server list.
 
 const SETUP_VERSION = 1;
@@ -335,6 +370,8 @@ const SETUP_VERSION = 1;
 function exportSetup(servers, general) {
     return JSON.stringify({ version: SETUP_VERSION, general: general, servers: servers }, null, 2);
 }
+
+const GENERAL_KEYS = ["defaultInterval", "sshOptions", "tailscaleEnabled", "tailscaleCommand"];
 
 // The known General settings in `raw`, checked. Invalid or unknown ones
 // are left out with a warning.
@@ -349,9 +386,11 @@ function parseGeneral(raw, warnings) {
         if (key === "defaultInterval" && asSeconds(value, 0) > 0) {
             // The config key is an integer.
             general.defaultInterval = Math.max(1, Math.round(asSeconds(value, 0)));
-        } else if (key === "sshOptions" && typeof value === "string") {
-            general.sshOptions = value;
-        } else if (key === "defaultInterval" || key === "sshOptions") {
+        } else if ((key === "sshOptions" || key === "tailscaleCommand") && typeof value === "string") {
+            general[key] = value;
+        } else if (key === "tailscaleEnabled" && typeof value === "boolean") {
+            general[key] = value;
+        } else if (GENERAL_KEYS.indexOf(key) >= 0) {
             warnings.push("general." + key + ": invalid value " + JSON.stringify(value) + ", ignored");
         } else {
             warnings.push("general." + key + ": unknown setting, ignored");

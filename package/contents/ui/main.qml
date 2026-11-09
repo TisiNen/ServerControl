@@ -27,6 +27,11 @@ PlasmoidItem {
     // See setResult() and expireResults().
     property var functionResults: ({})
 
+    // Whether the Tailscale check (tailscaleCommand) last succeeded. Then
+    // servers are reached at their tailscaleHost, and servers without one
+    // are not reachable. See checkTailscale().
+    property bool tailscaleActive: false
+
     // Number of user-triggered actions in flight; drives the panel spinner.
     // Status checks don't count, or the spinner would flash on every poll.
     property int actionsRunning: 0
@@ -57,8 +62,19 @@ PlasmoidItem {
     // old config are dropped instead of overwriting fresh state.
     property int _configGeneration: 0
     property string _appliedConfig: ""
+    // Bumped when tailscaleActive changes, so results of checks that went
+    // over the other network are dropped.
+    property int _networkGeneration: 0
+    // Tailscale check: a run is in flight, when the last one started (ms),
+    // and a counter that drops results of a run with an old command.
+    property bool _tailscaleChecking: false
+    property real _lastTailscaleCheck: 0
+    property int _tailscaleSeq: 0
 
     function stateText(server) {
+        if (!Model.reachable(server, tailscaleActive)) {
+            return i18n("Not reachable");
+        }
         if (!Model.statusFunction(server)) {
             return i18n("No status check");
         }
@@ -73,9 +89,11 @@ PlasmoidItem {
     }
 
     // A command with its placeholders filled in for `server`, using the
-    // SSH options from the General settings.
+    // SSH options from the General settings, and the Tailscale host while
+    // Tailscale is active.
     function commandFor(command, server) {
-        return Commands.substitute(command, server, Plasmoid.configuration.sshOptions);
+        return Commands.substitute(command, server, Plasmoid.configuration.sshOptions,
+                                   Model.viaTailscale(server, tailscaleActive));
     }
 
     // The name shown for a function in the popup and the confirmation dialog.
@@ -121,21 +139,85 @@ PlasmoidItem {
         return serverStates[server.id] || "";
     }
 
+    function unavailableReason(server, fn) {
+        return Model.unavailableReason(fn, server, serverStateOf(server), tailscaleActive);
+    }
+
+    // Runs the Tailscale check (tailscaleCommand). Called with the status
+    // checks, but at most once per FAST_POLL_INTERVAL, since status checks
+    // of several servers usually come together. While Tailscale support is
+    // off (tailscaleEnabled), or the command is empty, nothing runs and
+    // Tailscale counts as inactive.
+    function checkTailscale() {
+        const command = (Plasmoid.configuration.tailscaleCommand || "").trim();
+        if (!Plasmoid.configuration.tailscaleEnabled || command === "") {
+            setTailscaleActive(false);
+            return;
+        }
+        const now = Date.now();
+        if (_tailscaleChecking || now - _lastTailscaleCheck < Model.FAST_POLL_INTERVAL * 1000) {
+            return;
+        }
+        _tailscaleChecking = true;
+        _lastTailscaleCheck = now;
+        const seq = ++_tailscaleSeq;
+        runner.run(command, Model.DEFAULT_TIMEOUT, result => {
+            if (seq !== _tailscaleSeq) {
+                return;
+            }
+            _tailscaleChecking = false;
+            setTailscaleActive(result.exitCode === 0);
+        });
+    }
+
+    // After a change of the Tailscale settings: drops a check still running
+    // with the old ones. The next tick runs the status checks, and with them
+    // the Tailscale check (or, if support was turned off, sets it inactive).
+    function restartTailscaleCheck() {
+        _tailscaleSeq++;
+        _tailscaleChecking = false;
+        _lastTailscaleCheck = 0;
+        _nextCheck = {};
+    }
+
+    // The servers are now reached over another network, so everything
+    // known about them may be wrong: forget it and check again.
+    function setTailscaleActive(active) {
+        if (tailscaleActive === active) {
+            return;
+        }
+        tailscaleActive = active;
+        _networkGeneration++;
+        serverStates = {};
+        functionStates = {};
+        _checking = {};
+        _nextCheck = {};
+        for (const s of serverList) {
+            refreshToggles(s);
+        }
+    }
+
     // Runs one status function. The first one sets the server's online
     // state; any others only set their own "ok"/"fail".
+    // A server that isn't reachable (see Model.reachable()) isn't checked.
     function checkStatus(server, fn) {
         const key = Model.functionKey(server, fn);
         if (_checking[key]) {
             return;
         }
-        const primary = fn === Model.statusFunction(server);
-        const generation = _configGeneration;
-        _checking[key] = true;
+        checkTailscale();
         const now = Date.now();
         _nextCheck[key] = now + Model.checkInterval(fn, Plasmoid.configuration.defaultInterval,
                                                     _fastPollUntil[server.id] || 0, now) * 1000;
+        if (!Model.reachable(server, tailscaleActive)) {
+            return;
+        }
+        const primary = fn === Model.statusFunction(server);
+        const generation = _configGeneration;
+        const network = _networkGeneration;
+        _checking[key] = true;
         runner.run(commandFor(fn.command, server), fn.timeout, result => {
-            if (generation !== _configGeneration) {
+            if (generation !== _configGeneration || network !== _networkGeneration) {
                 return;
             }
             delete _checking[key];
@@ -153,12 +235,13 @@ PlasmoidItem {
         const key = Model.functionKey(server, fn);
         const seq = (_readSeq[key] || 0) + 1;
         const generation = _configGeneration;
+        const network = _networkGeneration;
         _readSeq[key] = seq;
         runner.run(commandFor(fn.stateCommand, server), fn.timeout, result => {
             if (done) {
                 done();
             }
-            if (generation !== _configGeneration || _readSeq[key] !== seq) {
+            if (generation !== _configGeneration || network !== _networkGeneration || _readSeq[key] !== seq) {
                 return;
             }
             setFunctionState(key, result.timedOut ? "unknown" : result.exitCode === 0 ? "on" : "off");
@@ -185,7 +268,7 @@ PlasmoidItem {
     function refreshToggles(server) {
         for (const fn of server.functions) {
             if (fn.type === "toggle" && !runningFunctions[Model.functionKey(server, fn)]
-                    && Model.unavailableReason(fn, server, serverStateOf(server)) === "") {
+                    && unavailableReason(server, fn) === "") {
                 readToggle(server, fn);
             }
         }
@@ -200,7 +283,9 @@ PlasmoidItem {
         refreshToggles(server);
     }
 
+    // Also runs the Tailscale check, for setups without status checks.
     function refreshAll() {
+        checkTailscale();
         for (const s of serverList) {
             refreshServer(s);
         }
@@ -210,7 +295,7 @@ PlasmoidItem {
     // The confirmation dialog, if any, has already been shown.
     function runFunction(server, fn, turnOn) {
         const key = Model.functionKey(server, fn);
-        if (runningFunctions[key] || Model.unavailableReason(fn, server, serverStateOf(server)) !== "") {
+        if (runningFunctions[key] || unavailableReason(server, fn) !== "") {
             return;
         }
         const command = fn.type === "toggle" ? (turnOn ? fn.onCommand : fn.offCommand) : fn.command;
@@ -358,6 +443,14 @@ PlasmoidItem {
 
         function onSshOptionsChanged() {
             root._nextCheck = {};
+        }
+
+        function onTailscaleEnabledChanged() {
+            root.restartTailscaleCheck();
+        }
+
+        function onTailscaleCommandChanged() {
+            root.restartTailscaleCheck();
         }
     }
 

@@ -4,6 +4,8 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.kde.iconthemes as KIconThemes
 
+import "code/model.js" as Model
+
 // The settings form for one function. It doesn't change `fn` itself: each
 // edit is reported with a signal and ConfigServers.qml writes it into its
 // copy of the config. Fields of other types are hidden, not destroyed.
@@ -17,6 +19,7 @@ Kirigami.FormLayout {
     // From the General settings.
     required property int defaultInterval
     required property string sshOptions
+    required property bool tailscaleEnabled
 
     signal fieldEdited(string key, var value)
     signal typeSelected(string type)
@@ -24,6 +27,8 @@ Kirigami.FormLayout {
     readonly property bool isStatus: fn.type === "status"
     readonly property bool isAction: fn.type === "action"
     readonly property bool isToggle: fn.type === "toggle"
+    // Disabled while Tailscale is active, see Model.needsLan().
+    readonly property bool lanOnly: !isStatus && Model.needsLan(fn)
 
     // Index of the entry with `value` in a ComboBox model, 0 if none.
     function indexOf(model, value) {
@@ -114,6 +119,8 @@ Kirigami.FormLayout {
         visible: editor.isStatus || editor.isAction
         server: editor.server
         sshOptions: editor.sshOptions
+        lanOnly: editor.lanOnly
+        tailscaleEnabled: editor.tailscaleEnabled
         command: editor.fn.command || ""
         placeholderText: editor.isStatus ? i18n("Exit code 0 means online") : ""
         onEdited: text => editor.fieldEdited("command", text)
@@ -125,6 +132,8 @@ Kirigami.FormLayout {
         visible: editor.isAction
         server: editor.server
         sshOptions: editor.sshOptions
+        lanOnly: editor.lanOnly
+        tailscaleEnabled: editor.tailscaleEnabled
         command: editor.fn.verifyCommand || ""
         placeholderText: i18n("Optional; its exit code decides success")
         onEdited: text => editor.fieldEdited("verifyCommand", text)
@@ -136,6 +145,8 @@ Kirigami.FormLayout {
         visible: editor.isToggle
         server: editor.server
         sshOptions: editor.sshOptions
+        lanOnly: editor.lanOnly
+        tailscaleEnabled: editor.tailscaleEnabled
         command: editor.fn.stateCommand || ""
         placeholderText: i18n("Exit code 0 means on")
         onEdited: text => editor.fieldEdited("stateCommand", text)
@@ -147,6 +158,8 @@ Kirigami.FormLayout {
         visible: editor.isToggle
         server: editor.server
         sshOptions: editor.sshOptions
+        lanOnly: editor.lanOnly
+        tailscaleEnabled: editor.tailscaleEnabled
         command: editor.fn.onCommand || ""
         onEdited: text => editor.fieldEdited("onCommand", text)
     }
@@ -157,6 +170,8 @@ Kirigami.FormLayout {
         visible: editor.isToggle
         server: editor.server
         sshOptions: editor.sshOptions
+        lanOnly: editor.lanOnly
+        tailscaleEnabled: editor.tailscaleEnabled
         command: editor.fn.offCommand || ""
         onEdited: text => editor.fieldEdited("offCommand", text)
     }

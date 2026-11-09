@@ -25,7 +25,7 @@ Item {
     readonly property string fnState: plasmoidItem.functionStates[key] || ""
     readonly property bool running: plasmoidItem.runningFunctions[key] === true
     readonly property string unavailableReason:
-        Model.unavailableReason(fn, server, plasmoidItem.serverStates[server.id] || "")
+        Model.unavailableReason(fn, server, plasmoidItem.serverStates[server.id] || "", plasmoidItem.tailscaleActive)
     // See functionResults in main.qml. null when there is nothing to show.
     readonly property var result: plasmoidItem.functionResults[key] || null
     // Show ✓ / ✗ in place of the icon or handle. A toggle shows only ✗: on
@@ -48,6 +48,10 @@ Item {
             return result.stderr.length > 500 ? result.stderr.slice(0, 500) + "…" : result.stderr;
         }
         switch (unavailableReason) {
+        case "unreachable":
+            return i18n("%1 has no Tailscale host and can't be reached while Tailscale is active", server.name);
+        case "needsLan":
+            return i18n("Wake-on-LAN needs the local network");
         case "needsOnline":
             return i18n("Available only while %1 is online", server.name);
         case "needsOffline":

@@ -24,5 +24,17 @@
     <entry name="sshOptions" type="String">
       <default>-o BatchMode=yes -o ConnectTimeout=5</default>
     </entry>
+
+    <!-- Tailscale support. Off: the check never runs, and the settings
+         hide everything about Tailscale. -->
+    <entry name="tailscaleEnabled" type="Bool">
+      <default>false</default>
+    </entry>
+
+    <!-- Exit code 0 means Tailscale is active: servers are then reached at
+         their tailscaleHost. Only used while tailscaleEnabled is on. -->
+    <entry name="tailscaleCommand" type="String">
+      <default>tailscale status --json | grep -q '"BackendState": *"Running"'</default>
+    </entry>
   </group>
 </kcfg>

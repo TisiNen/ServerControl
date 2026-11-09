@@ -33,7 +33,12 @@ function hasBatchMode(sshOptions) {
     return /batchmode[\s=]+yes/i.test(String(sshOptions || ""));
 }
 
-function placeholderValues(server, sshOptions) {
+// `viaTailscale` (see viaTailscale() in model.js): {host}, and with it
+// {ssh}, use the server's `tailscaleHost`.
+function placeholderValues(server, sshOptions, viaTailscale) {
+    if (viaTailscale && server.tailscaleHost) {
+        server = Object.assign({}, server, { host: server.tailscaleHost });
+    }
     return {
         host: shellQuote(server.host),
         mac: shellQuote(server.mac),
@@ -45,9 +50,9 @@ function placeholderValues(server, sshOptions) {
 
 // Replaces known {placeholders} with shell-quoted values from the server.
 // Unknown placeholders are left as they are. `sshOptions` is the General
-// setting for {ssh}.
-function substitute(command, server, sshOptions) {
-    const values = placeholderValues(server, sshOptions);
+// setting for {ssh}. With `viaTailscale`, {host} is the Tailscale host.
+function substitute(command, server, sshOptions, viaTailscale) {
+    const values = placeholderValues(server, sshOptions, viaTailscale);
     return String(command || "").replace(/\{(\w+)\}/g, function (match, key) {
         return Object.prototype.hasOwnProperty.call(values, key) ? values[key] : match;
     });
