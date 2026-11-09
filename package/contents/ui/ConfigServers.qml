@@ -303,7 +303,7 @@ KCM.SimpleKCM {
                     Layout.fillWidth: true
                     Layout.topMargin: Kirigami.Units.gridUnit * 4
                     visible: page.currentServer === null
-                    icon.name: "network-server"
+                    icon.name: "network-server-symbolic"
                     text: i18n("No servers yet")
                     explanation: i18n("Click “Add” to create the first one.")
                 }

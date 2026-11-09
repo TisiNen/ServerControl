@@ -7,7 +7,7 @@
     ],
     "Category": "System Information",
     "Description": "Show home server status, wake servers and power them off",
-    "Icon": "network-server",
+    "Icon": "network-server-symbolic",
     "Id": "com.github.TisiNen.servercontrol",
     "License": "GPL-3.0-or-later",
     "Name": "Server Control",

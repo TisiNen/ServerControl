@@ -85,7 +85,7 @@ PlasmaExtras.Representation {
                 anchors.centerIn: parent
                 width: parent.width - Kirigami.Units.gridUnit * 4
                 visible: list.count === 0
-                iconName: "network-server"
+                iconName: "network-server-symbolic"
                 text: i18n("No servers configured")
                 // Opens the settings dialog, like "Configure…" in the
                 // widget's context menu.
