@@ -68,6 +68,9 @@ PlasmoidItem {
                     page.cfg_defaultInterval = 120;
                 }]);
                 steps.push(["empty-options", () => page.cfg_sshOptions = ""]);
+                steps.push(["tailscale-enable", () => page.cfg_tailscaleEnabled = true]);
+                steps.push(["tailscale-empty", () => page.cfg_tailscaleCommand = ""]);
+                steps.push(["tailscale-default", () => page.cfg_tailscaleCommand = page.cfg_tailscaleCommandDefault]);
             }
             if (typeof page.importText === "function") {
                 steps.push(["export", () => page.showCurrentSetup()]);
@@ -82,7 +85,7 @@ PlasmoidItem {
                     '[{"name": "Imported", "host": "h", "functions": [{"type": "status", "command": "true"}, {"type": "bogus"}]}]')]);
                 steps.push(["import-setup", () => page.importText(JSON.stringify({
                     version: 1,
-                    general: { defaultInterval: 45, sshOptions: "-o BatchMode=yes", unknown: 1 },
+                    general: { defaultInterval: 45, sshOptions: "-o BatchMode=yes", tailscaleEnabled: true, tailscaleCommand: "true", unknown: 1 },
                     servers: [{ name: "A", host: "a", functions: [] }, { name: "B", host: "b", functions: [] }]
                 }))]);
                 steps.push(["export-after-import", () => page.showCurrentSetup()]);
@@ -116,6 +119,12 @@ PlasmoidItem {
             steps.push(["add-ping", () => {
                 page.setServerField("host", "example.invalid");
                 page.addFunction("ping");
+            }]);
+            // Plasma would set it from the saved config; the field and the
+            // second preview line show only while it is on.
+            steps.push(["tailscale-host", () => {
+                page.cfg_tailscaleEnabled = true;
+                page.setServerField("tailscaleHost", "nas.tailnet.ts.net");
             }]);
             steps.push(["interval-own", () => page.setFunctionField("interval", 45)]);
             steps.push(["interval-default", () => page.setFunctionField("interval", undefined)]);
