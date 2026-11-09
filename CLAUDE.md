@@ -462,6 +462,7 @@ Never leave a doc describing behaviour that no longer exists.
 | Doc                                 | Audience               | Update when …                                                                                                               |
 | ----------------------------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | `CLAUDE.md`                         | Claude, developer      | The data model, function types, placeholders, templates, conventions or package layout change; a roadmap phase is finished |
+| `README.md`                         | Users                  | Features, requirements, install/update steps, server-side prerequisites or templates change                                  |
 | `docs/QML through this codebase.md` | The user, learning QML | Any file in `package/contents/ui/` is added, removed, renamed or changes in a way that affects a quoted excerpt             |
 
 ### Rules
