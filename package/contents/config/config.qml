@@ -5,7 +5,7 @@ import org.kde.plasma.configuration
 ConfigModel {
     ConfigCategory {
         name: i18n("Servers")
-        icon: "network-server"
+        icon: "network-server-symbolic"
         source: "ConfigServers.qml"
     }
     ConfigCategory {

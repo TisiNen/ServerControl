@@ -423,11 +423,13 @@ Two more entries hold the General settings: `defaultInterval` (an `Int` with `<m
 ConfigModel {
     ConfigCategory {
         name: i18n("Servers")
-        icon: "network-server"
+        icon: "network-server-symbolic"
         source: "ConfigServers.qml"
     }
 }
 ```
+
+`icon` is a name from the icon theme. The dialog's sidebar draws it large, and in Breeze, `network-server` is a "places" icon, which from 32 px up is drawn as a folder. The `-symbolic` variant exists only up to 24 px, so the dialog scales that one up instead: the same plain server rack the server list shows, drawn in the text colour.
 
 `source` is a file in `contents/ui/`. Its root is a `KCM.SimpleKCM` (`import org.kde.kcmutils as KCM`), a scrollable page. The page doesn't touch `Plasmoid.configuration`. Instead it declares a property `cfg_<key>` for each config key, and Plasma does the rest:
 
