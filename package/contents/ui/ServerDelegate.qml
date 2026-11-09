@@ -82,6 +82,19 @@ Item {
             visible: functions.count > 0
             spacing: Kirigami.Units.smallSpacing
 
+            // The tallest control's height. Every control takes it and
+            // centers its content, so buttons, switches and indicators line up.
+            readonly property real rowHeight: {
+                let height = 0;
+                for (let i = 0; i < functions.count; i++) {
+                    const item = functions.itemAt(i);
+                    if (item) {
+                        height = Math.max(height, item.contentHeight);
+                    }
+                }
+                return height;
+            }
+
             Repeater {
                 id: functions
 
@@ -90,6 +103,7 @@ Item {
                 delegate: FunctionControl {
                     required property var modelData
 
+                    rowHeight: parent ? parent.rowHeight : 0
                     server: serverRow.modelData
                     fn: modelData
                     plasmoidItem: serverRow.plasmoidItem

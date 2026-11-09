@@ -61,19 +61,30 @@ Item {
         return "";
     }
 
+    // The height the content needs. The server row sets rowHeight to the
+    // largest contentHeight of its controls: buttons, switches and labels
+    // differ in height, and Flow aligns its items at the top.
+    readonly property real contentHeight: layout.implicitHeight
+    property real rowHeight: 0
+
     implicitWidth: layout.implicitWidth
-    implicitHeight: layout.implicitHeight
+    implicitHeight: Math.max(contentHeight, rowHeight)
 
     RowLayout {
         id: layout
 
-        anchors.fill: parent
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.verticalCenter: parent.verticalCenter
         spacing: Kirigami.Units.smallSpacing
 
         // Extra status function: a dot like the server's, plus the name.
         Rectangle {
             visible: control.fn.type === "status"
             Layout.alignment: Qt.AlignVCenter
+            // Buttons and switches bring their own padding; the indicator
+            // has none, so it gets margins to keep it from crowding them.
+            Layout.leftMargin: Kirigami.Units.largeSpacing
             implicitWidth: Kirigami.Units.gridUnit * 0.5
             implicitHeight: implicitWidth
             radius: width / 2
@@ -86,8 +97,8 @@ Item {
 
         PlasmaComponents3.Label {
             visible: control.fn.type === "status"
+            Layout.rightMargin: Kirigami.Units.largeSpacing
             text: control.plasmoidItem.functionName(control.fn)
-            font: Kirigami.Theme.smallFont
         }
 
         // While a command runs, a spinner takes the place of the button's
