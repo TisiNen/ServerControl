@@ -8,17 +8,17 @@ Nothing is hardcoded: you define your servers and their functions in the widget 
 function is a shell command, so the widget works with whatever your servers need.
 
 <p align="center">
-  <img align="middle" src="docs/images/Popup-Online.png" alt="Popup with the server online: Reboot and Power off are enabled, Wake is greyed out" width="420">
-  <img align="middle" src="docs/images/Popup-Offline.png" alt="Popup with the server offline: only Wake is enabled" width="420">
+  <img align="middle" hspace="4" vspace="4" src="docs/images/Popup-Online.png" alt="Popup with the server online: Reboot and Power off are enabled, Wake is greyed out" width="400">
+  <img align="middle" hspace="4" vspace="4" src="docs/images/Popup-Offline.png" alt="Popup with the server offline: only Wake is enabled" width="400">
 </p>
 <p align="center"><em>The popup with the server online (left) and offline (right). Functions that don't fit the current state are greyed out.</em></p>
 
 <p align="center">
-  <img align="middle" src="docs/images/Panel-Online.png" alt="Panel icon with a green dot: all servers online" height="32">
+  <img align="middle" hspace="4" vspace="4" src="docs/images/Panel-Online.png" alt="Panel icon with a green dot: all servers online" height="32">
   &nbsp;&nbsp;
-  <img align="middle" src="docs/images/Panel-Partial.png" alt="Panel icon with an orange dot: some servers online" height="32">
+  <img align="middle" hspace="4" vspace="4" src="docs/images/Panel-Partial.png" alt="Panel icon with an orange dot: some servers online" height="32">
   &nbsp;&nbsp;
-  <img align="middle" src="docs/images/Panel-Offline.png" alt="Panel icon with a grey dot: no server online" height="32">
+  <img align="middle" hspace="4" vspace="4" src="docs/images/Panel-Offline.png" alt="Panel icon with a grey dot: no server online" height="32">
 </p>
 <p align="center"><em>The panel icon: all servers online, some online, none online.</em></p>
 
@@ -36,8 +36,8 @@ function is a shell command, so the widget works with whatever your servers need
   another machine.
 
 <p align="center">
-  <img align="middle" src="docs/images/Popup-confirmation.png" alt="Confirmation dialog: Run Reboot on NAS? showing the full SSH command" width="420">
-  <img align="middle" src="docs/images/Popup-inline-error.png" alt="Popup after a failed Reboot: a red cross on the button and the SSH error below the controls" width="420">
+  <img align="middle" hspace="4" vspace="4" src="docs/images/Popup-confirmation.png" alt="Confirmation dialog: Run Reboot on NAS? showing the full SSH command" width="400">
+  <img align="middle" hspace="4" vspace="4" src="docs/images/Popup-inline-error.png" alt="Popup after a failed Reboot: a red cross on the button and the SSH error below the controls" width="400">
 </p>
 <p align="center"><em>Left: functions can ask for confirmation and show the exact command. Right: a failed command shows ✗ and the last line of its error output.</em></p>
 
@@ -88,9 +88,9 @@ each command field, the settings show the command as it will run on this server,
 placeholders filled in.
 
 <p align="center">
-  <img align="middle" src="docs/images/Config-Add-Function.png" alt="Add Function menu: Status (ping), Wake-on-LAN, Power off, Reboot, Flag toggle, Custom" width="189">
+  <img align="middle" hspace="4" vspace="4" src="docs/images/Config-Add-Function.png" alt="Add Function menu: Status (ping), Wake-on-LAN, Power off, Reboot, Flag toggle, Custom" width="189">
   &nbsp;&nbsp;
-  <img align="middle" src="docs/images/Config-Command-Preview.png" alt="Command field with {ssh} sudo systemctl poweroff and below it the full ssh command" width="440">
+  <img align="middle" hspace="4" vspace="4" src="docs/images/Config-Command-Preview.png" alt="Command field with {ssh} sudo systemctl poweroff and below it the full ssh command" width="440">
 </p>
 <p align="center"><em>Left: the function templates. Right: a command and its preview with placeholders substituted.</em></p>
 
