@@ -165,7 +165,6 @@ KCM.SimpleKCM {
 
         Kirigami.Separator {
             Kirigami.FormData.isSection: true
-            // Kirigami.FormData.label: i18nc("@title:group", "Import and Export")
         }
 
         Item {

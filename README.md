@@ -102,7 +102,7 @@ it into the text area, click **Import**, then adjust host, MAC address, user and
 Servers page. **Apply** saves, **Cancel** discards.
 
 <p align="center">
-  <img src="docs/images/Config-General.png" alt="General settings page: default check interval, SSH options with preview, and the JSON import/export area" width="560">
+  <img src="docs/images/Config-General.png" alt="General settings page: widget icon, default check interval, SSH options with preview, Tailscale check, and the JSON import/export area" width="560">
 </p>
 <p align="center"><em>The General page.</em></p>
 
