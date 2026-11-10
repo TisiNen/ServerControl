@@ -233,6 +233,9 @@ Implementation (`code/templates.js`, menu and dialog in `ConfigServers.qml`):
   outside it or on the panel icon.
 - Disabled controls (wrong online state) are greyed out and their tooltip says why.
 - Confirmation uses a Kirigami dialog that names the server and the function.
+- The header's refresh button runs all checks (`refreshAll()`). Its icon turns while the checks
+  that click started are still running (`refreshing` in `main.qml`), at least one full turn, and
+  stops upright. Checks started by the timer or by opening the popup don't start it.
 
 ### Feedback
 

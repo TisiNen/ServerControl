@@ -37,6 +37,12 @@ PlasmoidItem {
     property int actionsRunning: 0
     readonly property bool busy: actionsRunning > 0
 
+    // Number of checks started by refreshAll() still in flight (status
+    // checks, toggle reads, the Tailscale check); turns the popup's refresh
+    // icon. Checks started by the timer don't count.
+    property int refreshesRunning: 0
+    readonly property bool refreshing: refreshesRunning > 0
+
     readonly property int onlineCount: {
         let n = 0;
         for (const s of serverList) {
@@ -70,6 +76,9 @@ PlasmoidItem {
     property bool _tailscaleChecking: false
     property real _lastTailscaleCheck: 0
     property int _tailscaleSeq: 0
+    // True only while refreshAll() runs, so the checks it starts count in
+    // refreshesRunning.
+    property bool _inRefreshAll: false
 
     function stateText(server) {
         if (!Model.reachable(server, tailscaleActive)) {
@@ -161,7 +170,9 @@ PlasmoidItem {
         _tailscaleChecking = true;
         _lastTailscaleCheck = now;
         const seq = ++_tailscaleSeq;
+        const counted = countRefresh();
         runner.run(command, Model.DEFAULT_TIMEOUT, result => {
+            uncountRefresh(counted);
             if (seq !== _tailscaleSeq) {
                 return;
             }
@@ -216,7 +227,9 @@ PlasmoidItem {
         const generation = _configGeneration;
         const network = _networkGeneration;
         _checking[key] = true;
+        const counted = countRefresh();
         runner.run(commandFor(fn.command, server), fn.timeout, result => {
+            uncountRefresh(counted);
             if (generation !== _configGeneration || network !== _networkGeneration) {
                 return;
             }
@@ -237,7 +250,9 @@ PlasmoidItem {
         const generation = _configGeneration;
         const network = _networkGeneration;
         _readSeq[key] = seq;
+        const counted = countRefresh();
         runner.run(commandFor(fn.stateCommand, server), fn.timeout, result => {
+            uncountRefresh(counted);
             if (done) {
                 done();
             }
@@ -284,10 +299,30 @@ PlasmoidItem {
     }
 
     // Also runs the Tailscale check, for setups without status checks.
+    // The checks started here count in refreshesRunning.
     function refreshAll() {
+        _inRefreshAll = true;
         checkTailscale();
         for (const s of serverList) {
             refreshServer(s);
+        }
+        _inRefreshAll = false;
+    }
+
+    // Called when a check starts: counts it if refreshAll() started it.
+    // Returns whether it did, for uncountRefresh() in the check's callback.
+    // The callback always calls uncountRefresh(), before it drops an
+    // outdated result, so the count can't get stuck.
+    function countRefresh() {
+        if (_inRefreshAll) {
+            refreshesRunning++;
+        }
+        return _inRefreshAll;
+    }
+
+    function uncountRefresh(counted) {
+        if (counted) {
+            refreshesRunning--;
         }
     }
 

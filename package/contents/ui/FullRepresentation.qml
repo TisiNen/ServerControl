@@ -40,14 +40,50 @@ PlasmaExtras.Representation {
             }
 
             PlasmaComponents3.ToolButton {
+                id: refreshButton
+
                 icon.name: "view-refresh"
                 text: i18n("Check status now")
                 display: PlasmaComponents3.AbstractButton.IconOnly
-                onClicked: full.plasmoidItem.refreshAll()
+                onClicked: {
+                    full.plasmoidItem.refreshAll();
+                    if (!spin.running) {
+                        spin.start();
+                    }
+                }
 
                 PlasmaComponents3.ToolTip.text: text
                 PlasmaComponents3.ToolTip.visible: hovered
                 PlasmaComponents3.ToolTip.delay: Kirigami.Units.toolTipDelay
+
+                // The button's own icon can't be rotated, so it draws one
+                // itself, at the size of a flat Plasma tool button's icon.
+                contentItem: Kirigami.Icon {
+                    id: refreshIcon
+
+                    implicitWidth: Kirigami.Units.iconSizes.smallMedium
+                    implicitHeight: Kirigami.Units.iconSizes.smallMedium
+                    source: refreshButton.icon.name
+                    active: refreshButton.hovered
+                }
+
+                // One turn per run. At the end of a turn it starts the
+                // next one while the checks from refreshAll() still run,
+                // so a fast check still gets a full turn, and the icon
+                // always stops upright.
+                RotationAnimator {
+                    id: spin
+
+                    target: refreshIcon
+                    from: 0
+                    to: 360
+                    duration: 800
+                    onFinished: {
+                        if (full.plasmoidItem.refreshing) {
+                            start();
+                        }
+                    }
+                }
             }
         }
     }
