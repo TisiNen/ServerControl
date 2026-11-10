@@ -359,8 +359,8 @@ function moveItem(list, from, to) {
 
 // ---------------------------------------------------------------------------
 // Import and export of the whole setup, used by the General settings page.
-// Format: { "version": 1, "general": { defaultInterval, sshOptions, tailscaleEnabled,
-// tailscaleCommand },
+// Format: { "version": 1, "general": { icon, defaultInterval, sshOptions,
+// tailscaleEnabled, tailscaleCommand },
 // "servers": [ ... ] }. Import also accepts a bare server list.
 
 const SETUP_VERSION = 1;
@@ -371,7 +371,7 @@ function exportSetup(servers, general) {
     return JSON.stringify({ version: SETUP_VERSION, general: general, servers: servers }, null, 2);
 }
 
-const GENERAL_KEYS = ["defaultInterval", "sshOptions", "tailscaleEnabled", "tailscaleCommand"];
+const GENERAL_KEYS = ["icon", "defaultInterval", "sshOptions", "tailscaleEnabled", "tailscaleCommand"];
 
 // The known General settings in `raw`, checked. Invalid or unknown ones
 // are left out with a warning.
@@ -388,6 +388,8 @@ function parseGeneral(raw, warnings) {
             general.defaultInterval = Math.max(1, Math.round(asSeconds(value, 0)));
         } else if ((key === "sshOptions" || key === "tailscaleCommand") && typeof value === "string") {
             general[key] = value;
+        } else if (key === "icon" && typeof value === "string") {
+            general.icon = value.trim();
         } else if (key === "tailscaleEnabled" && typeof value === "boolean") {
             general[key] = value;
         } else if (GENERAL_KEYS.indexOf(key) >= 0) {

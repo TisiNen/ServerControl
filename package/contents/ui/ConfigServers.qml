@@ -28,6 +28,8 @@ KCM.SimpleKCM {
     property bool cfg_tailscaleEnabledDefault
     property string cfg_tailscaleCommand
     property string cfg_tailscaleCommandDefault
+    property string cfg_icon
+    property string cfg_iconDefault
 
     property var servers: []
     // Problems found when the saved config was parsed. Saving writes the

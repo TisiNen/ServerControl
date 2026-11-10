@@ -3,6 +3,7 @@ import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.kde.kcmutils as KCM
+import org.kde.iconthemes as KIconThemes
 
 import "code/commands.js" as Commands
 import "code/model.js" as Model
@@ -13,6 +14,8 @@ import "code/model.js" as Model
 KCM.SimpleKCM {
     id: page
 
+    property string cfg_icon
+    property string cfg_iconDefault
     property int cfg_defaultInterval
     property int cfg_defaultIntervalDefault
     property string cfg_sshOptions
@@ -33,6 +36,7 @@ KCM.SimpleKCM {
     // Fills the text area with the current setup, as it would be saved now.
     function showCurrentSetup() {
         jsonArea.text = Model.exportSetup(Model.parseServers(cfg_servers).servers, {
+            icon: cfg_icon,
             defaultInterval: cfg_defaultInterval,
             sshOptions: cfg_sshOptions,
             tailscaleEnabled: cfg_tailscaleEnabled,
@@ -56,6 +60,9 @@ KCM.SimpleKCM {
 
         cfg_servers = Model.serializeServers(setup.servers);
         const general = setup.general || {};
+        if (general.icon !== undefined) {
+            cfg_icon = general.icon;
+        }
         if (general.defaultInterval !== undefined) {
             cfg_defaultInterval = general.defaultInterval;
         }
@@ -86,16 +93,103 @@ KCM.SimpleKCM {
 
     Component.onCompleted: showCurrentSetup()
 
+    // A button next to a setting that sets it back to its default. Disabled
+    // while the setting has its default value.
+    component ResetButton: QQC2.ToolButton {
+        icon.name: "edit-undo"
+        text: i18nc("@action:button", "Reset to default")
+        display: QQC2.AbstractButton.IconOnly
+        QQC2.ToolTip.text: text
+        QQC2.ToolTip.visible: hovered
+        QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+    }
+
     Kirigami.FormLayout {
-        QQC2.SpinBox {
+
+        Item {
+            Kirigami.FormData.isSection: true
+        }
+
+        RowLayout {
+            Kirigami.FormData.label: i18nc("@label", "Widget icon:")
+            Layout.fillWidth: true
+            spacing: Kirigami.Units.smallSpacing
+
+            QQC2.Button {
+                // Found and clicked by the sandbox test (page-harness.qml).
+                objectName: "chooseWidgetIconButton"
+                Layout.preferredWidth: implicitHeight
+                icon.name: page.cfg_icon || page.cfg_iconDefault
+                text: i18nc("@action:button", "Choose…")
+                display: QQC2.AbstractButton.IconOnly
+                onClicked: iconDialog.open()
+                QQC2.ToolTip.text: text
+                QQC2.ToolTip.visible: hovered
+                QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+            }
+
+            QQC2.TextField {
+                Layout.fillWidth: true
+                Layout.preferredWidth: Kirigami.Units.gridUnit * 16
+                text: page.cfg_icon
+                placeholderText: page.cfg_iconDefault
+                font.family: Kirigami.Theme.fixedWidthFont.family
+                onTextEdited: page.cfg_icon = text.trim()
+            }
+
+            ResetButton {
+                enabled: page.cfg_icon !== page.cfg_iconDefault
+                onClicked: page.cfg_icon = page.cfg_iconDefault
+            }
+        }
+
+        // KDE's icon picker, a separate window. Like in FunctionEditor.qml:
+        // `iconName` keeps the last pick, so `accepted` covers picking the
+        // same icon again.
+        KIconThemes.IconDialog {
+            id: iconDialog
+
+            function apply() {
+                if (iconName !== "") {
+                    page.cfg_icon = iconName;
+                }
+            }
+
+            onIconNameChanged: apply()
+            onAccepted: apply()
+        }
+
+        Item {
+            Kirigami.FormData.isSection: true
+        }
+
+        Kirigami.Separator {
+            Kirigami.FormData.isSection: true
+            // Kirigami.FormData.label: i18nc("@title:group", "Import and Export")
+        }
+
+        Item {
+            Kirigami.FormData.isSection: true
+        }
+
+        RowLayout {
             Kirigami.FormData.label: i18nc("@label:spinbox", "Default check interval:")
-            from: 1
-            to: 86400
-            editable: true
-            value: page.cfg_defaultInterval
-            textFromValue: (value, locale) => i18ncp("@item:valuesuffix", "%1 second", "%1 seconds", value)
-            valueFromText: (text, locale) => parseInt(text) || page.cfg_defaultIntervalDefault
-            onValueModified: page.cfg_defaultInterval = value
+            spacing: Kirigami.Units.smallSpacing
+
+            QQC2.SpinBox {
+                from: 1
+                to: 86400
+                editable: true
+                value: page.cfg_defaultInterval
+                textFromValue: (value, locale) => i18ncp("@item:valuesuffix", "%1 second", "%1 seconds", value)
+                valueFromText: (text, locale) => parseInt(text) || page.cfg_defaultIntervalDefault
+                onValueModified: page.cfg_defaultInterval = value
+            }
+
+            ResetButton {
+                enabled: page.cfg_defaultInterval !== page.cfg_defaultIntervalDefault
+                onClicked: page.cfg_defaultInterval = page.cfg_defaultIntervalDefault
+            }
         }
 
         QQC2.Label {
@@ -111,13 +205,23 @@ KCM.SimpleKCM {
             Kirigami.FormData.isSection: true
         }
 
-        QQC2.TextField {
+        RowLayout {
             Kirigami.FormData.label: i18nc("@label:textbox", "SSH options:")
             Layout.fillWidth: true
-            Layout.preferredWidth: Kirigami.Units.gridUnit * 24
-            text: page.cfg_sshOptions
-            font: Kirigami.Theme.fixedWidthFont
-            onTextEdited: page.cfg_sshOptions = text
+            spacing: Kirigami.Units.smallSpacing
+
+            QQC2.TextField {
+                Layout.fillWidth: true
+                Layout.preferredWidth: Kirigami.Units.gridUnit * 24
+                text: page.cfg_sshOptions
+                font: Kirigami.Theme.fixedWidthFont
+                onTextEdited: page.cfg_sshOptions = text
+            }
+
+            ResetButton {
+                enabled: page.cfg_sshOptions !== page.cfg_sshOptionsDefault
+                onClicked: page.cfg_sshOptions = page.cfg_sshOptionsDefault
+            }
         }
 
         QQC2.Label {
@@ -176,15 +280,9 @@ KCM.SimpleKCM {
                 onTextEdited: page.cfg_tailscaleCommand = text
             }
 
-            QQC2.ToolButton {
-                icon.name: "edit-undo"
-                text: i18nc("@action:button", "Reset to default")
-                display: QQC2.AbstractButton.IconOnly
+            ResetButton {
                 enabled: page.cfg_tailscaleCommand !== page.cfg_tailscaleCommandDefault
                 onClicked: page.cfg_tailscaleCommand = page.cfg_tailscaleCommandDefault
-                QQC2.ToolTip.text: text
-                QQC2.ToolTip.visible: hovered
-                QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
             }
         }
 

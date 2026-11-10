@@ -217,7 +217,9 @@ Implementation (`code/templates.js`, menu and dialog in `ConfigServers.qml`):
 
 ### Compact representation (panel)
 
-- One icon with a status dot overlay:
+- One icon with a status dot overlay. The icon is set on the General page (config key `icon`,
+  default `network-server-symbolic`; empty means the default), bound to `Plasmoid.icon` in
+  `main.qml`:
   - green: all servers online
   - orange: some servers online
   - grey: none online
@@ -267,11 +269,14 @@ Implementation (`code/templates.js`, menu and dialog in `ConfigServers.qml`):
     `interval` and uses the General default, which the disabled spin box shows.
   - The command previews use the saved SSH options. Changes on the General page show here only
     after Apply, because the dialog shows one page at a time.
-- **General** page: default status interval, SSH options, and Tailscale support with its check
-  command.
-  - The controls write `cfg_defaultInterval`, `cfg_sshOptions`, `cfg_tailscaleEnabled` and
-    `cfg_tailscaleCommand` directly. The check command and its explanation show only while
-    "Enable Tailscale support" is checked. The check has a button that resets it to the default.
+- **General** page: widget icon, default status interval, SSH options, and Tailscale support
+  with its check command.
+  - The controls write `cfg_icon`, `cfg_defaultInterval`, `cfg_sshOptions`,
+    `cfg_tailscaleEnabled` and `cfg_tailscaleCommand` directly. The check command and its
+    explanation show only while "Enable Tailscale support" is checked.
+  - Widget icon: an icon button that opens KDE's icon picker, and a text field with the icon name.
+  - The widget icon, the check interval, the SSH options and the Tailscale check each have a
+    "Reset to default" button, disabled while the value is the default.
   - Below the SSH options: what `{ssh}` becomes, and a warning if the options lack
     `BatchMode=yes` (ssh would wait for a password until the timeout).
   - When either setting changes, the widget runs all status checks on the next tick.
@@ -282,7 +287,7 @@ Implementation (`code/templates.js`, menu and dialog in `ConfigServers.qml`):
   Import also accepts a bare server list.
   - It works through copy and paste: pure QML can't read or write files. A text area shows the
     current setup when the page opens ("Show Current Setup" refreshes it); "Copy" copies it.
-  - `general` holds `defaultInterval`, `sshOptions`, `tailscaleEnabled` and `tailscaleCommand`. Export writes the servers as parsed
+  - `general` holds `icon`, `defaultInterval`, `sshOptions`, `tailscaleEnabled` and `tailscaleCommand`. Export writes the servers as parsed
     (`parseServers()`), so invalid entries are fixed or left out.
   - "Import" parses the pasted text with `parseSetup()` in `model.js` and replaces the servers,
     plus each valid general setting it contains, in the dialog's `cfg_` properties. Apply saves,
@@ -301,8 +306,8 @@ package/
 ├── metadata.json             # KPackageStructure: "Plasma/Applet", X-Plasma-API-Minimum-Version: "6.0"
 └── contents/
     ├── config/
-    │   ├── main.xml          # KConfigXT schema: servers (JSON string), defaultInterval, sshOptions,
-    │   │                     # tailscaleEnabled, tailscaleCommand
+    │   ├── main.xml          # KConfigXT schema: servers (JSON string), icon, defaultInterval,
+    │   │                     # sshOptions, tailscaleEnabled, tailscaleCommand
     │   └── config.qml        # ConfigModel with ConfigCategory pages
     └── ui/
         ├── main.qml          # PlasmoidItem root
@@ -315,7 +320,7 @@ package/
         ├── ConfigServers.qml # settings page (KCM.SimpleKCM): server list, server form, function list
         ├── FunctionEditor.qml # settings form for one function
         ├── CommandField.qml  # settings field for one command, with preview and placeholder warnings
-        ├── ConfigGeneral.qml # settings page: default check interval, SSH options
+        ├── ConfigGeneral.qml # settings page: widget icon, check interval, SSH options, Tailscale, import/export
         └── code/
             ├── model.js      # parse/validate/serialize config JSON
             ├── templates.js  # preconfigured functions for "Add Function"
@@ -418,7 +423,7 @@ Rules:
   with a `cfg_` property for every config key (as Plasma does), and calls its edit functions
   step by step (select each function, click "Choose…" for the icon, add a server, add every
   template, open the flag dialog, set a Tailscale host, set and clear an interval, change type,
-  move, remove; on the General page, set the SSH options and the interval, enable Tailscale,
+  move, remove; on the General page, set the widget icon, click "Choose…" for it, set the SSH options and the interval, enable Tailscale,
   clear and reset the Tailscale check, export, click "Copy", and import valid and invalid setups). Buttons the harness clicks have an `objectName`; it finds them with
   `findItem()`. Add `--screenshots DIR` to save a PNG per step and look at them.
   When a page's edit functions change, update the steps in the harness.

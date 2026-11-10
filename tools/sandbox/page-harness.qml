@@ -63,6 +63,15 @@ PlasmoidItem {
         function makeSteps(page) {
             const steps = [["loaded", () => {}]];
             if (page.hasOwnProperty("cfg_sshOptions") && typeof page.selectServer !== "function") {
+                steps.push(["widget-icon", () => page.cfg_icon = "org.kde.plasma.systemmonitor"]);
+                steps.push(["choose-widget-icon", () => {
+                    const button = frame.findItem(page, "chooseWidgetIconButton");
+                    if (!button) {
+                        throw new Error("page-harness: chooseWidgetIconButton not found");
+                    }
+                    button.clicked();
+                }]);
+                steps.push(["widget-icon-empty", () => page.cfg_icon = ""]);
                 steps.push(["no-batchmode", () => {
                     page.cfg_sshOptions = "-p 2222";
                     page.cfg_defaultInterval = 120;
@@ -71,6 +80,11 @@ PlasmoidItem {
                 steps.push(["tailscale-enable", () => page.cfg_tailscaleEnabled = true]);
                 steps.push(["tailscale-empty", () => page.cfg_tailscaleCommand = ""]);
                 steps.push(["tailscale-default", () => page.cfg_tailscaleCommand = page.cfg_tailscaleCommandDefault]);
+                steps.push(["reset-defaults", () => {
+                    page.cfg_icon = page.cfg_iconDefault;
+                    page.cfg_defaultInterval = page.cfg_defaultIntervalDefault;
+                    page.cfg_sshOptions = page.cfg_sshOptionsDefault;
+                }]);
             }
             if (typeof page.importText === "function") {
                 steps.push(["export", () => page.showCurrentSetup()]);
@@ -85,7 +99,7 @@ PlasmoidItem {
                     '[{"name": "Imported", "host": "h", "functions": [{"type": "status", "command": "true"}, {"type": "bogus"}]}]')]);
                 steps.push(["import-setup", () => page.importText(JSON.stringify({
                     version: 1,
-                    general: { defaultInterval: 45, sshOptions: "-o BatchMode=yes", tailscaleEnabled: true, tailscaleCommand: "true", unknown: 1 },
+                    general: { icon: " computer ", defaultInterval: 45, sshOptions: "-o BatchMode=yes", tailscaleEnabled: true, tailscaleCommand: "true", unknown: 1 },
                     servers: [{ name: "A", host: "a", functions: [] }, { name: "B", host: "b", functions: [] }]
                 }))]);
                 steps.push(["export-after-import", () => page.showCurrentSetup()]);

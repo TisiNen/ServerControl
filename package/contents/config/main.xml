@@ -12,6 +12,11 @@
       <default>[]</default>
     </entry>
 
+    <!-- The widget's icon in the panel. Empty means the default. -->
+    <entry name="icon" type="String">
+      <default>network-server-symbolic</default>
+    </entry>
+
     <!-- Seconds between checks, for status functions without their own
          `interval`. -->
     <entry name="defaultInterval" type="Int">

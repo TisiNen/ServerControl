@@ -492,4 +492,7 @@ PlasmoidItem {
             }
         }
     }
+
+    // Shown by the compact representation. An empty setting gives the default.
+    Plasmoid.icon: Plasmoid.configuration.icon || "network-server-symbolic"
 }

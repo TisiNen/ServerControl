@@ -4,25 +4,25 @@ Nov 4, 2026 · @Tilo
 
 ## How to read this guide
 
-This guide teaches QML using only the Server Control widget as it stands after phase 3 (on top of phase 2's config model, function types, confirmation dialog and inline feedback: the settings pages "Servers" and "General", with function templates and import and export of the whole setup), plus the Tailscale support from phase 4: 17 source files, about 3055 lines. Read Part 1 first, then follow a status check and a click through the code in Part 3; the per-file notes in Part 4 are for looking things up.
+This guide teaches QML using only the Server Control widget as it stands after phase 3 (on top of phase 2's config model, function types, confirmation dialog and inline feedback: the settings pages "Servers" and "General", with function templates and import and export of the whole setup), plus the Tailscale support from phase 4: 17 source files, about 3145 lines. Read Part 1 first, then follow a status check and a click through the code in Part 3; the per-file notes in Part 4 are for looking things up.
 
 | File | Lines | Language | What it is |
 | --- | --- | --- | --- |
 | `package/metadata.json` | 18 | JSON | Tells Plasma this folder is a widget: name, icon, plugin ID |
-| `package/contents/config/main.xml` | 40 | XML | The config schema: the `servers` JSON, the default check interval, the SSH options, the Tailscale settings |
+| `package/contents/config/main.xml` | 45 | XML | The config schema: the `servers` JSON, the widget icon, the default check interval, the SSH options, the Tailscale settings |
 | `package/contents/config/config.qml` | 16 | QML | The list of pages in the settings dialog |
-| `package/contents/ui/main.qml` | 495 | QML | The root of the widget: config, state, timer, running all commands |
+| `package/contents/ui/main.qml` | 498 | QML | The root of the widget: config, state, timer, running all commands |
 | `package/contents/ui/CommandRunner.qml` | 52 | QML | Runs shell commands in the background and calls you back |
 | `package/contents/ui/CompactRepresentation.qml` | 55 | QML | The panel icon with its coloured dot and spinner |
 | `package/contents/ui/FullRepresentation.qml` | 129 | QML | The popup: heading, refresh button, config warning, server list, confirmation dialog |
 | `package/contents/ui/ServerDelegate.qml` | 175 | QML | One server in the popup list: dot, name, host with "via Tailscale" badge, state, its functions and their errors |
 | `package/contents/ui/FunctionControl.qml` | 213 | QML | One function: status indicator, action button or toggle switch |
 | `package/contents/ui/ResultIcon.qml` | 14 | QML | The ✓ or ✗ shown after a command |
-| `package/contents/ui/ConfigServers.qml` | 578 | QML | Settings page "Servers": server list, server fields, function list |
+| `package/contents/ui/ConfigServers.qml` | 580 | QML | Settings page "Servers": server list, server fields, function list |
 | `package/contents/ui/FunctionEditor.qml` | 255 | QML | Settings form for one function, with fields per type |
-| `package/contents/ui/ConfigGeneral.qml` | 270 | QML | Settings page "General": default check interval, SSH options, Tailscale settings, import and export |
+| `package/contents/ui/ConfigGeneral.qml` | 354 | QML | Settings page "General": widget icon, default check interval, SSH options, Tailscale settings, import and export |
 | `package/contents/ui/CommandField.qml` | 128 | QML | Settings field for one command, with LAN and Tailscale preview and placeholder warnings |
-| `package/contents/ui/code/model.js` | 447 | JavaScript | Parses and validates the `servers` config JSON; availability, Tailscale and polling rules; editing helpers; import and export |
+| `package/contents/ui/code/model.js` | 449 | JavaScript | Parses and validates the `servers` config JSON; availability, Tailscale and polling rules; editing helpers; import and export |
 | `package/contents/ui/code/templates.js` | 75 | JavaScript | The preconfigured functions for "Add Function" |
 | `package/contents/ui/code/commands.js` | 110 | JavaScript | Placeholder substitution, shell quoting, timeout wrapping, error lines, placeholder checks |
 
@@ -316,7 +316,7 @@ component ListToolButton: QQC2.ToolButton {
 }
 ```
 
-and then writes `ListToolButton { icon.name: "go-up"; … }` six times. Compare `Component { … }` \[14\], which declares a template *object*, not a type.
+and then writes `ListToolButton { icon.name: "go-up"; … }` six times. `ConfigGeneral.qml` does the same for its three "Reset to default" buttons (`ResetButton`). Compare `Component { … }` \[14\], which declares a template *object*, not a type.
 
 ### 22. Dialogs with your own content: Kirigami.Dialog
 
@@ -364,7 +364,7 @@ Properties the repo uses:
 | `expanded` | read and set | `true` while the popup is open |
 | `toolTipMainText`, `toolTipSubText` | `main.qml` sets | The tooltip on the panel icon |
 
-There is also an attached object `Plasmoid` (capital P) that gives access to the applet itself: `Plasmoid.icon` (from `metadata.json`) and `Plasmoid.configuration.servers` for the saved settings (see "Configuration" below).
+There is also an attached object `Plasmoid` (capital P) that gives access to the applet itself: `Plasmoid.icon` (from `metadata.json`, overridden by the `icon` setting) and `Plasmoid.configuration.servers` for the saved settings (see "Configuration" below).
 
 ### Compact and full representation
 
@@ -414,6 +414,8 @@ Two quirks shape `CommandRunner.qml`. Two identical command strings would be one
 
 KConfigXT only stores simple types, so the whole server list is one JSON string. `model.js` turns it into objects; `main.qml` calls it whenever the string changes. The settings page writes it (next section).
 
+`icon` (a `String`, default `network-server-symbolic`) is the panel icon. `main.qml` binds it to `Plasmoid.icon` at its very end: `Plasmoid.icon: Plasmoid.configuration.icon || "network-server-symbolic"`. The `||` gives the default when the setting is empty, and `CompactRepresentation.qml` shows `Plasmoid.icon`, so a new icon appears in the panel as soon as it is applied.
+
 Two more entries hold the General settings: `defaultInterval` (an `Int` with `<min>1</min>`) and `sshOptions` (a `String`). `main.qml` reads them where they are used, as `Plasmoid.configuration.defaultInterval` and `Plasmoid.configuration.sshOptions`, and its `Connections` handlers `onDefaultIntervalChanged` and `onSshOptionsChanged` reschedule all status checks when they change.
 
 Two more entries belong to Tailscale: `tailscaleEnabled` (a `Bool`, default `false`) turns the support on, and `tailscaleCommand` (a `String`) is the command that tells whether Tailscale is active. The command's default contains quotes and a `|`; inside an XML element that needs no escaping, only `<` and `&` would. `onTailscaleEnabledChanged` and `onTailscaleCommandChanged` both call `restartTailscaleCheck()`, which drops a check still running with the old settings and reschedules everything.
@@ -459,7 +461,7 @@ QQC2.SpinBox {
 
 ### metadata.json
 
-The file Plasma reads to find the widget at all. `KPackageStructure: "Plasma/Applet"` says it's a widget, `Id` must be unique and matches the install folder, and `Icon` becomes `Plasmoid.icon`. Plasma looks for `contents/ui/main.qml` by convention.
+The file Plasma reads to find the widget at all. `KPackageStructure: "Plasma/Applet"` says it's a widget, `Id` must be unique and matches the install folder, and `Icon` becomes `Plasmoid.icon` (until `main.qml` sets it from the `icon` setting). Plasma looks for `contents/ui/main.qml` by convention.
 
 ## Part 3: One status check, start to finish
 
@@ -539,6 +541,7 @@ The root of the widget and the only place that holds state. Everything else read
 - **Lines 463-469:** the two representations, each handed a reference to `root` (Part 2).
 - **Lines 471-473:** one `CommandRunner` instance, named `runner` \[8\]. It isn't visual; a `PlasmoidItem` can hold non-visual children.
 - **Lines 475-494, `Timer`:** one timer ticking every second, instead of one per status function. Each function's next check time is stored in `_nextCheck`, so functions can have different intervals and can run faster after Wake. Each tick also calls `expireResults()`. Inside the handler, the code writes `root.serverList` and `root.checkStatus` with the id: inside a child object, being explicit avoids confusion with the Timer's own properties.
+- **Lines 496-497, `Plasmoid.icon`:** the panel icon from the `icon` setting, or the default when it is empty. A binding \[4\], so a new icon shows as soon as the settings are applied.
 
 ### CommandRunner.qml
 
@@ -619,34 +622,37 @@ The settings dialog's page list (Part 2, "Settings pages"): "Servers" first, the
 
 The "General" settings page: settings that apply to all servers, and import and export of the whole setup. Every control is bound to a `cfg_` property and writes it directly (Part 2). There is no copy to manage, unlike `ConfigServers.qml`.
 
-- **Default check interval:** used by status functions without their own `interval`.
-- **SSH options:** what `{ssh}` puts between `ssh` and `user@host`. Below the field, `Commands.sshCommand()` shows the result for a made-up server. A warning appears when the options lack `BatchMode=yes` (`Commands.hasBatchMode()`): without it, ssh asks for a password that nobody can type in, and the command just waits for its timeout.
+- **Lines 96-105, `ResetButton`:** an inline `component` (Part 1, idea 21): an icon-only `ToolButton` with the "Reset to default" tooltip. Each use sets `enabled` (only while the value differs from its `cfg_…Default`) and `onClicked` (assigns the default).
+- **Lines 108-139, widget icon:** a square icon `Button`, a `TextField` with the icon name and a `ResetButton` in one `RowLayout` \[20\]. The button shows `cfg_icon`, or the default while the field is empty; the field's placeholder shows the default name. Typing writes `cfg_icon` (trimmed).
+- **Lines 144-155, `iconDialog`:** the same `KIconThemes.IconDialog` as in `FunctionEditor.qml`, writing `cfg_icon` instead of reporting a field edit.
+- **Lines 161-179, default check interval:** used by status functions without their own `interval`. The spin box and a `ResetButton` share a `RowLayout`.
+- **SSH options:** what `{ssh}` puts between `ssh` and `user@host`, with a `ResetButton` next to the field. Below the field, `Commands.sshCommand()` shows the result for a made-up server. A warning appears when the options lack `BatchMode=yes` (`Commands.hasBatchMode()`): without it, ssh asks for a password that nobody can type in, and the command just waits for its timeout.
 - **Tailscale:** a `CheckBox` bound to `cfg_tailscaleEnabled`, like the other controls. The rows below it have `visible: page.cfg_tailscaleEnabled`, so they appear when it is checked; an invisible row takes no space in the `FormLayout`, label included.
-- **Tailscale check:** the command that tells whether Tailscale is active. The field and a `ToolButton` sit in a `RowLayout`, which is one field of the `FormLayout` \[20\] with the label on the row. The button sets `cfg_tailscaleCommand` back to `cfg_tailscaleCommandDefault`, the default from `main.xml` that Plasma passes in, and is disabled while they are equal.
+- **Tailscale check:** the command that tells whether Tailscale is active. The field and a `ResetButton` sit in a `RowLayout`, which is one field of the `FormLayout` \[20\] with the label on the row. The button sets `cfg_tailscaleCommand` back to `cfg_tailscaleCommandDefault`, the default from `main.xml` that Plasma passes in, and is disabled while they are equal.
 - **`cfg_servers`, `cfg_serversDefault`:** only written by an import. Declaring every key also avoids log warnings (Part 2).
-- **Lines 33-42, `showCurrentSetup()`:** fills the text area with `Model.exportSetup()`: the servers as parsed from `cfg_servers`, and the four settings. `Component.onCompleted` (line 87) calls it, so the current setup shows when the page opens. It reads the `cfg_` properties, not the saved config, so after an import it shows what Apply would save.
-- **Lines 44-85, `importText()`:** `Model.parseSetup()` does the checking and returns an error code or the result. On an error, only the message changes. Otherwise it assigns `cfg_servers` and each general setting the text contained. The spin box, check box and text fields above are bound to those properties \[4\], so they show the imported values at once, and Apply enables. The message is built from several translated sentences, each added only when it applies.
-- **Lines 213-228, text area:** a `TextArea` inside a `ScrollView` with a fixed height (Part 1, idea 20).
-- **Lines 230-260, buttons:** "Copy" has no clipboard API to call; QML has none. Instead it selects all text in the text area, calls the text area's own `copy()`, and deselects again. "Copy" and "Import" are disabled while the text area is empty.
-- **Lines 262-268, message:** a `Kirigami.InlineMessage`, green after an import and red after an error, bound to `importMessage` and `importFailed`.
+- **Lines 37-46, `showCurrentSetup()`:** fills the text area with `Model.exportSetup()`: the servers as parsed from `cfg_servers`, and the five settings. `Component.onCompleted` (line 94) calls it, so the current setup shows when the page opens. It reads the `cfg_` properties, not the saved config, so after an import it shows what Apply would save.
+- **Lines 50-92, `importText()`:** `Model.parseSetup()` does the checking and returns an error code or the result. On an error, only the message changes. Otherwise it assigns `cfg_servers` and each general setting the text contained. The spin box, check box and text fields above are bound to those properties \[4\], so they show the imported values at once, and Apply enables. The message is built from several translated sentences, each added only when it applies.
+- **Lines 297-312, text area:** a `TextArea` inside a `ScrollView` with a fixed height (Part 1, idea 20).
+- **Lines 314-344, buttons:** "Copy" has no clipboard API to call; QML has none. Instead it selects all text in the text area, calls the text area's own `copy()`, and deselects again. "Copy" and "Import" are disabled while the text area is empty.
+- **Lines 346-352, message:** a `Kirigami.InlineMessage`, green after an import and red after an error, bound to `importMessage` and `importFailed`.
 
 ### ConfigServers.qml
 
 The "Servers" settings page. It edits a parsed copy of the config and writes it back as JSON to `cfg_servers` on every change (Part 2).
 
-- **Lines 19-30, `cfg_` properties:** set by Plasma; see Part 2. The page edits `cfg_servers` and only reads `cfg_defaultInterval` and `cfg_sshOptions`, to pass them to the function editor. `cfg_tailscaleEnabled` shows or hides the Tailscale host field and is passed on to the function editor; `cfg_tailscaleCommand` is declared only to avoid the warning.
-- **Lines 32-40, page state:** `servers` is the list being edited, parsed with the same `Model.parseServers()` as the widget, so the page sees exactly what the popup shows. The selection is two indexes; `currentServer` and `currentFunction` are bindings on them \[4\], `null` when nothing is selected.
-- **Lines 44-60, `load()` and `_written`:** `load()` parses `cfg_servers`, at start and whenever `cfg_servers` changes from *outside*, e.g. through the Defaults button. The page's own writes change `cfg_servers` too; `_written` holds the last JSON the page wrote, so `onCfg_serversChanged` can tell the two apart.
-- **Lines 62-68, `edit(change)`:** every change goes through here. It copies the list (`Model.copyServers()`), lets the arrow function passed as `change` modify the copy, then assigns the copy to `servers` and its JSON to `cfg_servers`. The same copy-and-assign pattern as in `main.qml` \[4\]: mutating `servers` in place would not update any binding.
-- **Lines 70-172, edit functions:** one per button or field: add, remove and move servers and functions, set a field, change a function's type. `addFunction(templateId)` adds a function from `templates.js`, with a translated default name it passes in. `addFlagToggle()` adds a flag toggle, named after the file if no name was given; `askFlagPath()` opens the dialog that asks for the file. After a move or remove, they fix the selection so it stays on the same item (`indexAfterMove()`). They are small on purpose; the rules live in `model.js`.
-- **Lines 189-193, `primaryStatusId`:** the id of the current server's first status function. The function list labels that one "Online/Server state" instead of "Status", because it is the server's dot in the popup, not a control. Compared by id, not by object: a JS array used as a Repeater model may hand its delegates copies of the objects.
-- **Lines 196-201, `ListToolButton`:** an inline type \[21\].
-- **Lines 206-213, `InlineMessage`:** shown when parsing the saved config skipped or fixed something. Applying writes the cleaned-up list, so the message says so.
-- **Lines 219-298, server list:** a `Repeater` \[15\] of `ItemDelegate`s, standard clickable list rows; `highlighted` marks the selected one. Below it Add, Move up, Move down and Remove.
-- **Lines 300-313, `PlaceholderMessage`:** instead of the form while there are no servers.
-- **Lines 315-558, server form:** a `Kirigami.FormLayout` \[20\] with the server fields (the Tailscale host is optional; `|| ""` covers servers without the field, and it shows only while Tailscale support is on), then the "Functions" section. Each function row is an `ItemDelegate` whose `contentItem` is replaced by a `RowLayout` with icon, name, type and three tool buttons. "Add Function" opens a `QQC2.Menu` with the templates; `popup(button, 0, height)` places it under the button. A `MenuSeparator` sets "Custom", an empty action, apart.
-- **Lines 499-557, `flagDialog`:** a `Kirigami.Dialog` \[22\] asking for the path of the flag file and an optional name. The name field's placeholder shows the name that will be used if it stays empty (`Templates.flagName()`).
-- **Lines 560-574, `FunctionEditor`:** the form for the selected function. While nothing is selected it is hidden and gets a dummy `fn`, so its bindings never read from `null`. Its signals call `setFunctionField()` and `setFunctionType()`.
+- **Lines 19-32, `cfg_` properties:** set by Plasma; see Part 2. The page edits `cfg_servers` and only reads `cfg_defaultInterval` and `cfg_sshOptions`, to pass them to the function editor. `cfg_tailscaleEnabled` shows or hides the Tailscale host field and is passed on to the function editor; `cfg_tailscaleCommand` and `cfg_icon` are declared only to avoid the warning.
+- **Lines 34-42, page state:** `servers` is the list being edited, parsed with the same `Model.parseServers()` as the widget, so the page sees exactly what the popup shows. The selection is two indexes; `currentServer` and `currentFunction` are bindings on them \[4\], `null` when nothing is selected.
+- **Lines 46-62, `load()` and `_written`:** `load()` parses `cfg_servers`, at start and whenever `cfg_servers` changes from *outside*, e.g. through the Defaults button. The page's own writes change `cfg_servers` too; `_written` holds the last JSON the page wrote, so `onCfg_serversChanged` can tell the two apart.
+- **Lines 64-70, `edit(change)`:** every change goes through here. It copies the list (`Model.copyServers()`), lets the arrow function passed as `change` modify the copy, then assigns the copy to `servers` and its JSON to `cfg_servers`. The same copy-and-assign pattern as in `main.qml` \[4\]: mutating `servers` in place would not update any binding.
+- **Lines 72-174, edit functions:** one per button or field: add, remove and move servers and functions, set a field, change a function's type. `addFunction(templateId)` adds a function from `templates.js`, with a translated default name it passes in. `addFlagToggle()` adds a flag toggle, named after the file if no name was given; `askFlagPath()` opens the dialog that asks for the file. After a move or remove, they fix the selection so it stays on the same item (`indexAfterMove()`). They are small on purpose; the rules live in `model.js`.
+- **Lines 191-195, `primaryStatusId`:** the id of the current server's first status function. The function list labels that one "Online/Server state" instead of "Status", because it is the server's dot in the popup, not a control. Compared by id, not by object: a JS array used as a Repeater model may hand its delegates copies of the objects.
+- **Lines 198-203, `ListToolButton`:** an inline type \[21\].
+- **Lines 208-215, `InlineMessage`:** shown when parsing the saved config skipped or fixed something. Applying writes the cleaned-up list, so the message says so.
+- **Lines 221-300, server list:** a `Repeater` \[15\] of `ItemDelegate`s, standard clickable list rows; `highlighted` marks the selected one. Below it Add, Move up, Move down and Remove.
+- **Lines 302-315, `PlaceholderMessage`:** instead of the form while there are no servers.
+- **Lines 317-560, server form:** a `Kirigami.FormLayout` \[20\] with the server fields (the Tailscale host is optional; `|| ""` covers servers without the field, and it shows only while Tailscale support is on), then the "Functions" section. Each function row is an `ItemDelegate` whose `contentItem` is replaced by a `RowLayout` with icon, name, type and three tool buttons. "Add Function" opens a `QQC2.Menu` with the templates; `popup(button, 0, height)` places it under the button. A `MenuSeparator` sets "Custom", an empty action, apart.
+- **Lines 501-559, `flagDialog`:** a `Kirigami.Dialog` \[22\] asking for the path of the flag file and an optional name. The name field's placeholder shows the name that will be used if it stays empty (`Templates.flagName()`).
+- **Lines 562-576, `FunctionEditor`:** the form for the selected function. While nothing is selected it is hidden and gets a dummy `fn`, so its bindings never read from `null`. Its signals call `setFunctionField()` and `setFunctionType()`.
 
 ### FunctionEditor.qml
 

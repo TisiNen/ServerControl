@@ -96,8 +96,8 @@ placeholders filled in.
 </p>
 <p align="center"><em>Left: the function templates. Right: a command and its preview with placeholders substituted.</em></p>
 
-The **General** page sets the default check interval, the SSH options used for `{ssh}` and
-Tailscale support (see [Tailscale](#5-tailscale-optional)), and has the import/export area. `examples/home-server.example.json` is a complete example: paste
+The **General** page sets the panel icon, the default check interval, the SSH options used for
+`{ssh}` and Tailscale support (see [Tailscale](#5-tailscale-optional)), and has the import/export area. `examples/home-server.example.json` is a complete example: paste
 it into the text area, click **Import**, then adjust host, MAC address, user and paths on the
 Servers page. **Apply** saves, **Cancel** discards.
 
