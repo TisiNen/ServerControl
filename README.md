@@ -31,6 +31,8 @@ function is a shell command, so the widget works with whatever your servers need
     on the server.
 - **Placeholders** in commands: `{host}`, `{mac}`, `{user}`, `{name}` and `{ssh}`
   (becomes `ssh <SSH options> {user}@{host}`).
+- **Tailscale**: away from home, servers are reached at their Tailscale address, with a
+  "via Tailscale" badge. Servers without one show as not reachable, and Wake-on-LAN is disabled.
 - **Templates** for common functions: ping status, Wake-on-LAN, power off, reboot, flag toggle.
 - **Import/export** of the whole setup as JSON (copy and paste), for backups or moving to
   another machine.
@@ -75,8 +77,8 @@ it onto the panel.
 
 Open the widget's settings: right-click the icon → **Configure Server Control…**.
 
-On the **Servers** page, add your servers (name, host, MAC address, SSH user) and give each
-one its functions.
+On the **Servers** page, add your servers (name, host, optional Tailscale host, MAC address,
+SSH user) and give each one its functions.
 
 <p align="center">
   <img src="docs/images/Config-Servers.png" alt="Servers settings page: server list on the left, server fields and function list on the right" width="700">
@@ -94,8 +96,8 @@ placeholders filled in.
 </p>
 <p align="center"><em>Left: the function templates. Right: a command and its preview with placeholders substituted.</em></p>
 
-The **General** page sets the default check interval and the SSH options used for `{ssh}`, and
-has the import/export area. `examples/home-server.example.json` is a complete example: paste
+The **General** page sets the default check interval, the SSH options used for `{ssh}` and
+Tailscale support (see [Tailscale](#5-tailscale-optional)), and has the import/export area. `examples/home-server.example.json` is a complete example: paste
 it into the text area, click **Import**, then adjust host, MAC address, user and paths on the
 Servers page. **Apply** saves, **Cancel** discards.
 
@@ -220,6 +222,30 @@ file.
 
 The SSH user needs write access to the directory of the flag file. The widget only manages
 the file; the script that reads it is up to you.
+
+### 5. Tailscale (optional)
+
+If you use [Tailscale](https://tailscale.com) to reach your servers when you are away from
+home, check **Enable Tailscale support** on the General page and click **Apply**. Then the
+Servers page has a **Tailscale host** field: enter each server's Tailscale IP or MagicDNS name.
+
+With the status checks, the widget runs the **Tailscale check** from the General page. By
+default that is
+
+```sh
+tailscale status --json | grep -q '"BackendState": *"Running"'
+```
+
+While it succeeds (exit code 0):
+
+- `{host}`, and with it `{ssh}`, use the server's Tailscale host. The popup shows
+  "via Tailscale" next to it.
+- Servers without a Tailscale host show as **Not reachable**, and their buttons are disabled.
+- Functions that use `{mac}` (Wake-on-LAN) are disabled: Wake-on-LAN needs the local network.
+
+The command preview in the settings shows both versions of a command, LAN and Tailscale.
+Uncheck **Enable Tailscale support** to turn it all off again; the Tailscale hosts you entered
+are kept.
 
 ## Development
 

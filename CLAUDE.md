@@ -58,9 +58,9 @@ Parsing and validation live in `code/model.js` (`parseServers()`), with these ru
 - Warnings are English developer messages, logged with `console.warn`. The popup only shows that
   there were some.
 
-Servers also have an optional `tailscaleHost` field (Tailscale IP or MagicDNS name). It is
-reserved for the later Tailscale feature (see Roadmap phase 4). Until then, validation must keep
-it and other unknown fields instead of dropping them.
+Servers also have an optional `tailscaleHost` field (Tailscale IP or MagicDNS name), used while
+Tailscale is active (see "Tailscale" below). It is trimmed if present and left out otherwise.
+Validation keeps unknown fields instead of dropping them.
 
 ```json
 [
@@ -141,6 +141,34 @@ Details of the implementation:
   change the online state, so it starts faster polling of that server. Actions available `always`
   don't.
 
+### Tailscale
+
+The user enables Tailscale on the laptop only when away from home.
+
+- Switched on with a check box in the General settings (config key `tailscaleEnabled`, default
+  off). While it is off, the check never runs, Tailscale counts as inactive, and the settings hide
+  everything about Tailscale: the check command, the servers' "Tailscale host" field (a host set
+  earlier is kept) and the Tailscale line of the command previews.
+- Detection: a configurable command in the General settings (config key `tailscaleCommand`,
+  default `tailscale status --json | grep -q '"BackendState": *"Running"'`). Exit code 0 means
+  active. An empty command never counts as active. It runs without placeholders and with the
+  default timeout (10 s).
+- It runs with the status checks, not on a timer of its own: `checkStatus()` and `refreshAll()`
+  call `checkTailscale()` in `main.qml`, which skips the run while one is in flight or the last one
+  started less than 5 s ago.
+- While Tailscale is active, a server with a `tailscaleHost` is reached there: `{host}`, and with it
+  `{ssh}`, resolve to that address (`viaTailscale()` in `model.js`). The popup shows the Tailscale
+  host and a small "via Tailscale" badge.
+- A server without a `tailscaleHost` shows as "Not reachable" (grey dot) while Tailscale is active.
+  Its status checks and toggle reads don't run, and all its controls are disabled
+  (`reachable()`, reason `unreachable`).
+- Wake-on-LAN can't work over Tailscale (broadcast, and an off server isn't in the tailnet).
+  While Tailscale is active, actions and toggles that use `{mac}` in any command are disabled,
+  with the tooltip "Wake-on-LAN needs the local network" (`needsLan()`, reason `needsLan`).
+  No relay host is planned.
+- When the detected state changes, all server and function states are forgotten and checked
+  again, and results of checks still running over the old network are dropped.
+
 ### Placeholders
 
 Substituted in every command before it runs:
@@ -149,6 +177,9 @@ Substituted in every command before it runs:
 | ------------------------------------- | -------------------------------------------------------- |
 | `{host}`, `{mac}`, `{user}`, `{name}` | From the server entry                                    |
 | `{ssh}`                               | `ssh <SSH options> {user}@{host}`                        |
+
+While Tailscale is active, `{host}` is the server's `tailscaleHost` (see "Tailscale"). There are no
+separate placeholders for the LAN or the Tailscale address.
 
 The SSH options come from the General settings (config key `sshOptions`, default
 `-o BatchMode=yes -o ConnectTimeout=5`). They are inserted as typed, not quoted; empty options
@@ -226,15 +257,21 @@ Implementation (`code/templates.js`, menu and dialog in `ConfigServers.qml`):
   - The function editor shows the fields of the function's type. Changing the type keeps name,
     icon, timeout, unknown fields and the fields both types share; fields only the old type
     used are dropped (`changeFunctionType()` in `model.js`).
+  - The server form has a "Tailscale host" field (optional), shown only with Tailscale support on.
   - Under each command field: the command as it will run on this server (placeholders
-    substituted), and a warning for unknown or empty placeholders.
+    substituted), and a warning for unknown or empty placeholders. With Tailscale support on and a
+    server with a Tailscale host, the preview shows a "LAN:" and a "Tailscale:" line when they differ; for a function that
+    uses `{mac}`, the Tailscale line says it isn't available.
   - The first status function is labelled "Online/Server state" in the function list.
   - A status function's check interval has a "Default" check box. Checked, the function has no
     `interval` and uses the General default, which the disabled spin box shows.
   - The command previews use the saved SSH options. Changes on the General page show here only
     after Apply, because the dialog shows one page at a time.
-- **General** page: default status interval and SSH options.
-  - The controls write `cfg_defaultInterval` and `cfg_sshOptions` directly.
+- **General** page: default status interval, SSH options, and Tailscale support with its check
+  command.
+  - The controls write `cfg_defaultInterval`, `cfg_sshOptions`, `cfg_tailscaleEnabled` and
+    `cfg_tailscaleCommand` directly. The check command and its explanation show only while
+    "Enable Tailscale support" is checked. The check has a button that resets it to the default.
   - Below the SSH options: what `{ssh}` becomes, and a warning if the options lack
     `BatchMode=yes` (ssh would wait for a password until the timeout).
   - When either setting changes, the widget runs all status checks on the next tick.
@@ -245,7 +282,7 @@ Implementation (`code/templates.js`, menu and dialog in `ConfigServers.qml`):
   Import also accepts a bare server list.
   - It works through copy and paste: pure QML can't read or write files. A text area shows the
     current setup when the page opens ("Show Current Setup" refreshes it); "Copy" copies it.
-  - `general` holds `defaultInterval` and `sshOptions`. Export writes the servers as parsed
+  - `general` holds `defaultInterval`, `sshOptions`, `tailscaleEnabled` and `tailscaleCommand`. Export writes the servers as parsed
     (`parseServers()`), so invalid entries are fixed or left out.
   - "Import" parses the pasted text with `parseSetup()` in `model.js` and replaces the servers,
     plus each valid general setting it contains, in the dialog's `cfg_` properties. Apply saves,
@@ -264,7 +301,8 @@ package/
 ├── metadata.json             # KPackageStructure: "Plasma/Applet", X-Plasma-API-Minimum-Version: "6.0"
 └── contents/
     ├── config/
-    │   ├── main.xml          # KConfigXT schema: servers (JSON string), defaultInterval, sshOptions
+    │   ├── main.xml          # KConfigXT schema: servers (JSON string), defaultInterval, sshOptions,
+    │   │                     # tailscaleEnabled, tailscaleCommand
     │   └── config.qml        # ConfigModel with ConfigCategory pages
     └── ui/
         ├── main.qml          # PlasmoidItem root
@@ -379,9 +417,9 @@ Rules:
   `tools/sandbox/page-harness.qml` replaces `main.qml` in a copy of the package, loads the page
   with a `cfg_` property for every config key (as Plasma does), and calls its edit functions
   step by step (select each function, click "Choose…" for the icon, add a server, add every
-  template, open the flag dialog, set and clear an interval, change type, move, remove; on the
-  General page, set the SSH options and the interval, export, click "Copy", and import valid
-  and invalid setups). Buttons the harness clicks have an `objectName`; it finds them with
+  template, open the flag dialog, set a Tailscale host, set and clear an interval, change type,
+  move, remove; on the General page, set the SSH options and the interval, enable Tailscale,
+  clear and reset the Tailscale check, export, click "Copy", and import valid and invalid setups). Buttons the harness clicks have an `objectName`; it finds them with
   `findItem()`. Add `--screenshots DIR` to save a PNG per step and look at them.
   When a page's edit functions change, update the steps in the harness.
 - `console.log` output is filtered in the sandbox; use `console.warn` for temporary debug output,
@@ -433,18 +471,8 @@ Work in phases. Each phase should be usable and testable on its own.
      - Limits: the command is one `sh -c` argument, capped at 128 KiB on Linux. Each IO error
        (missing file, permission, full disk) needs its own message. The sandbox can't test the
        dialog.
-   - **Tailscale support.** The user enables Tailscale on the laptop only when away from home.
-     - Detection: a configurable command in the General settings (exit code 0 = active), default
-       `tailscale status --json | grep -q '"BackendState": *"Running"'`. Run it together with
-       the status checks, not more often.
-     - Servers without a `tailscaleHost` show as "Not reachable" while Tailscale is active.
-     - The settings' command preview shows both the LAN and the Tailscale version of a command.
-     - When Tailscale is active and a server has a `tailscaleHost`, `{host}` (and with it
-       `{ssh}`) resolves to that address. Add explicit `{lanhost}` and `{tshost}` placeholders.
-     - The popup shows a small "via Tailscale" badge on affected servers.
-     - Wake-on-LAN can't work over Tailscale (broadcast, and an off server isn't in the
-       tailnet). While Tailscale is active, functions that use `{mac}` are disabled, with the
-       tooltip "Wake-on-LAN needs the local network". No relay host is planned.
+   - **Tailscale support** (done): see "Tailscale" under "Data model". Explicit `{lanhost}` and
+     `{tshost}` placeholders were dropped: no use case.
 
 ## Conventions
 
