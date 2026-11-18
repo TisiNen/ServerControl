@@ -5,13 +5,15 @@
         "Name": "TisiNen"
       }
     ],
+    "BugReportUrl": "https://github.com/TisiNen/ServerControl/issues",
     "Category": "System Information",
-    "Description": "Show home server status, wake servers and power them off",
+    "Description": "Monitor and control your servers with custom commands: status checks, actions and toggles, e.g. Wake-on-LAN or power off over SSH",
     "Icon": "network-server-symbolic",
     "Id": "com.github.TisiNen.servercontrol",
     "License": "GPL-3.0-or-later",
     "Name": "Server Control",
-    "Version": "0.1"
+    "Version": "1.0",
+    "Website": "https://github.com/TisiNen/ServerControl"
   },
   "KPackageStructure": "Plasma/Applet",
   "X-Plasma-API-Minimum-Version": "6.0"
