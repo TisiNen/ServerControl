@@ -1,11 +1,20 @@
 # Server Control
 
+<p align="center">
+  <b><a href="#install">Install</a></b> |
+  <b><a href="#configure">Configure</a></b> |
+  <b><a href="#server-setup">Server setup</a></b> |
+  <b><a href="#update">Update</a></b> |
+  <b><a href="https://github.com/TisiNen/ServerControl/issues">Report a bug</a></b>
+</p>
+
 A KDE Plasma 6 panel widget for controlling home servers. It shows whether your servers are
 online, wakes them with Wake-on-LAN, toggles flag files and powers them off or reboots them
 over SSH.
 
 Nothing is hardcoded: you define your servers and their functions in the widget settings. Each
 function is a shell command, so the widget works with whatever your servers need.
+
 
 <p align="center">
   <img align="middle" hspace="4" vspace="4" src="docs/images/Popup-Online.png" alt="Popup with the server online: Reboot and Power off are enabled, Wake is greyed out" width="400">
@@ -64,13 +73,34 @@ and power-off commands do what they say.
 
 ## Install
 
+<details>
+<summary><b>From a release</b> (.plasmoid file)</summary>
+
+Download the `.plasmoid` file from the
+[latest release](https://github.com/TisiNen/ServerControl/releases/latest). Then either:
+
+- right-click the panel → **Add or Manage Widgets…** → **Get New** → **Install Widget From
+  Local File…** and choose the file, or
+- install it in a terminal:
+
+  ```sh
+  kpackagetool6 -t Plasma/Applet -i servercontrol-*.plasmoid
+  ```
+
+</details>
+
+<details>
+<summary><b>From source</b> (git)</summary>
+
 ```sh
 git clone https://github.com/TisiNen/ServerControl.git
 cd ServerControl
 kpackagetool6 -t Plasma/Applet -i package/
 ```
 
-Then right-click the panel → **Add or Manage Widgets…**, search for **Server Control** and drag
+</details>
+
+After installing, right-click the panel → **Add or Manage Widgets…**, search for **Server Control** and drag
 it onto the panel.
 
 ## Configure
@@ -108,12 +138,33 @@ Servers page. **Apply** saves, **Cancel** discards.
 
 ## Update
 
+<details>
+<summary><b>From a release</b> (.plasmoid file)</summary>
+
+Download the new `.plasmoid` file from the
+[latest release](https://github.com/TisiNen/ServerControl/releases/latest), then:
+
+```sh
+kpackagetool6 -t Plasma/Applet -u servercontrol-*.plasmoid
+systemctl --user restart plasma-plasmashell
+```
+
+If the folder holds more than one `.plasmoid` file, give the exact file name instead of
+`servercontrol-*.plasmoid`.
+
+</details>
+
+<details>
+<summary><b>From source</b> (git)</summary>
+
 ```sh
 cd ServerControl
 git pull
 kpackagetool6 -t Plasma/Applet -u package/
 systemctl --user restart plasma-plasmashell
 ```
+
+</details>
 
 Restarting `plasmashell` reloads the panel so the new version is used. Your configuration is
 kept.

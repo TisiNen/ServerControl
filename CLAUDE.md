@@ -11,9 +11,9 @@ The widget is **generic**: servers and their functions are defined in the widget
 not hardcoded. Each function is a configurable shell command.
 
 - Working name: **Server Control**
-- Plugin ID: `com.github.TisiNen.servercontrol` (placeholder — confirm before publishing)
+- Plugin ID: `com.github.TisiNen.servercontrol` (final: published, never change it; Plasma uses it to install and update the widget)
 - Stack: **pure QML/JavaScript**, no C++ backend
-- License: TBD
+- License: GPL-3.0-or-later (`LICENSE`)
 
 ### Environment note
 
